@@ -1,0 +1,29 @@
+[
+  {
+    "inspection_id": "INS001",
+    "contractor_id": "C001",
+    "inspection_type": "site_safety",
+    "inspection_date": "2026-08-20",
+    "status": "passed",
+    "findings_count": 0,
+    "inspector": "Safety Officer 01"
+  },
+  {
+    "inspection_id": "INS002",
+    "contractor_id": "C002",
+    "inspection_type": "site_safety",
+    "inspection_date": "2026-08-20",
+    "status": "passed",
+    "findings_count": 1,
+    "inspector": "Safety Officer 01"
+  },
+  {
+    "inspection_id": "INS003",
+    "contractor_id": "C003",
+    "inspection_type": "site_safety",
+    "inspection_date": "2026-08-20",
+    "status": "failed",
+    "findings_count": 3,
+    "inspector": "Safety Officer 01"
+  }
+]
