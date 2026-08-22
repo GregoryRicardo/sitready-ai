@@ -1,0 +1,92 @@
+[
+  {
+    "training_id": "TR001",
+    "contractor_id": "C001",
+    "training_type": "general_safety",
+    "person_name": "Employee 01",
+    "completion_date": "2026-01-15",
+    "expiry_date": "2027-01-15",
+    "status": "valid",
+    "mandatory": true
+  },
+  {
+    "training_id": "TR002",
+    "contractor_id": "C001",
+    "training_type": "site_induction",
+    "person_name": "Employee 01",
+    "completion_date": "2026-08-20",
+    "expiry_date": null,
+    "status": "complete",
+    "mandatory": true
+  },
+  {
+    "training_id": "TR003",
+    "contractor_id": "C001",
+    "training_type": "electrical_safety",
+    "person_name": "Employee 01",
+    "completion_date": "2026-02-10",
+    "expiry_date": "2027-02-10",
+    "status": "valid",
+    "mandatory": true
+  },
+  {
+    "training_id": "TR004",
+    "contractor_id": "C002",
+    "training_type": "general_safety",
+    "person_name": "Employee 02",
+    "completion_date": "2026-02-15",
+    "expiry_date": "2027-02-15",
+    "status": "valid",
+    "mandatory": true
+  },
+  {
+    "training_id": "TR005",
+    "contractor_id": "C002",
+    "training_type": "site_induction",
+    "person_name": "Employee 02",
+    "completion_date": "2026-08-20",
+    "expiry_date": null,
+    "status": "complete",
+    "mandatory": true
+  },
+  {
+    "training_id": "TR006",
+    "contractor_id": "C002",
+    "training_type": "working_at_height",
+    "person_name": "Employee 02",
+    "completion_date": "2026-03-01",
+    "expiry_date": "2027-03-01",
+    "status": "valid",
+    "mandatory": true
+  },
+  {
+    "training_id": "TR007",
+    "contractor_id": "C003",
+    "training_type": "general_safety",
+    "person_name": "Employee 03",
+    "completion_date": "2026-01-10",
+    "expiry_date": "2027-01-10",
+    "status": "valid",
+    "mandatory": true
+  },
+  {
+    "training_id": "TR008",
+    "contractor_id": "C003",
+    "training_type": "site_induction",
+    "person_name": "Employee 03",
+    "completion_date": "2026-08-20",
+    "expiry_date": null,
+    "status": "complete",
+    "mandatory": true
+  },
+  {
+    "training_id": "TR009",
+    "contractor_id": "C003",
+    "training_type": "working_at_height",
+    "person_name": "Employee 03",
+    "completion_date": null,
+    "expiry_date": null,
+    "status": "missing",
+    "mandatory": true
+  }
+]
