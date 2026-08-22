@@ -1,27 +1,4 @@
-import os
-
-from google.cloud import firestore
-
-
-PROJECT_ID = "sitready-ai-506306"
-
-
-def get_firestore_client() -> firestore.Client:
-    """
-    Create a Firestore client for the local emulator.
-
-    The emulator environment variable is required during local development
-    so we don't accidentally connect to production Firestore.
-    """
-    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST")
-
-    if not emulator_host:
-        raise RuntimeError(
-            "FIRESTORE_EMULATOR_HOST is not set. "
-            "The local Firestore emulator must be running."
-        )
-
-    return firestore.Client(project=PROJECT_ID)
+from agent.firestore_client import get_firestore_client
 
 
 def get_contractor(contractor_id: str) -> dict:
@@ -32,7 +9,7 @@ def get_contractor(contractor_id: str) -> dict:
         contractor_id: Firestore contractor document ID, e.g. C001.
 
     Returns:
-        A dictionary containing the contractor data.
+        Contractor data as a dictionary.
 
     Raises:
         ValueError: If contractor_id is empty.
@@ -56,14 +33,11 @@ def get_contractor(contractor_id: str) -> dict:
             f"Contractor '{contractor_id}' was not found."
         )
 
-    contractor = document.to_dict()
-
     return {
         "contractor_id": document.id,
-        **contractor,
+        **document.to_dict(),
     }
 
 
 if __name__ == "__main__":
-    contractor = get_contractor("C001")
-    print(contractor)
+    print(get_contractor("C001"))
