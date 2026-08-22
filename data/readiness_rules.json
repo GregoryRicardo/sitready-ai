@@ -1,0 +1,92 @@
+[
+  {
+    "rule_id": "RULE001",
+    "rule_name": "Expired mandatory document",
+    "category": "document",
+    "condition_type": "expired_mandatory_document",
+    "severity": "critical",
+    "result": "NOT_READY",
+    "enabled": true,
+    "description": "A mandatory document with an expired status causes the contractor to be not ready."
+  },
+  {
+    "rule_id": "RULE002",
+    "rule_name": "Missing mandatory document",
+    "category": "document",
+    "condition_type": "missing_mandatory_document",
+    "severity": "critical",
+    "result": "NOT_READY",
+    "enabled": true,
+    "description": "A mandatory document that has not been submitted causes the contractor to be not ready."
+  },
+  {
+    "rule_id": "RULE003",
+    "rule_name": "Missing mandatory training",
+    "category": "training",
+    "condition_type": "missing_mandatory_training",
+    "severity": "critical",
+    "result": "NOT_READY",
+    "enabled": true,
+    "description": "Required training that is missing causes the contractor to be not ready."
+  },
+  {
+    "rule_id": "RULE004",
+    "rule_name": "Expired mandatory training",
+    "category": "training",
+    "condition_type": "expired_mandatory_training",
+    "severity": "critical",
+    "result": "NOT_READY",
+    "enabled": true,
+    "description": "Required training that has expired causes the contractor to be not ready."
+  },
+  {
+    "rule_id": "RULE005",
+    "rule_name": "Failed required inspection",
+    "category": "inspection",
+    "condition_type": "failed_required_inspection",
+    "severity": "critical",
+    "result": "NOT_READY",
+    "enabled": true,
+    "description": "A failed required inspection causes the contractor to be not ready."
+  },
+  {
+    "rule_id": "RULE006",
+    "rule_name": "High priority overdue corrective action",
+    "category": "corrective_action",
+    "condition_type": "high_priority_overdue_action",
+    "severity": "critical",
+    "result": "NOT_READY",
+    "enabled": true,
+    "description": "A high-priority corrective action that is overdue causes the contractor to be not ready."
+  },
+  {
+    "rule_id": "RULE007",
+    "rule_name": "Expiring mandatory document",
+    "category": "document",
+    "condition_type": "expiring_mandatory_document",
+    "severity": "medium",
+    "result": "ATTENTION_REQUIRED",
+    "enabled": true,
+    "description": "A mandatory document that is approaching expiry requires attention but does not automatically make the contractor not ready in this prototype."
+  },
+  {
+    "rule_id": "RULE008",
+    "rule_name": "Open medium priority corrective action",
+    "category": "corrective_action",
+    "condition_type": "open_medium_priority_action",
+    "severity": "medium",
+    "result": "ATTENTION_REQUIRED",
+    "enabled": true,
+    "description": "An open medium-priority corrective action requires attention."
+  },
+  {
+    "rule_id": "RULE009",
+    "rule_name": "All mandatory requirements satisfied",
+    "category": "general",
+    "condition_type": "all_required_checks_pass",
+    "severity": "low",
+    "result": "READY",
+    "enabled": true,
+    "description": "The contractor is ready when all configured mandatory requirements are satisfied and no critical issue exists."
+  }
+]
