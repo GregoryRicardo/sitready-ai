@@ -40,8 +40,8 @@ def evaluate_readiness(
     """
     Evaluate contractor readiness against configured prototype rules.
 
-    The decision is deterministic:
-    readiness is based on explicit rules and supplied evidence.
+    The decision is deterministic: readiness is based on explicit
+    rules and the evidence supplied to this function.
     """
 
     rules = load_readiness_rules()
@@ -61,10 +61,6 @@ def evaluate_readiness(
 
         matched = False
 
-        # ---------------------------------------------------------
-        # DOCUMENT RULES
-        # ---------------------------------------------------------
-
         if condition == "expired_mandatory_document":
             matched_documents = [
                 document
@@ -75,10 +71,11 @@ def evaluate_readiness(
 
             for document in matched_documents:
                 matched = True
-
                 issues.append(
                     {
                         "category": "document",
+                        "issue_type": "expired_document",
+                        "issue_reference": document["document_id"],
                         "rule_id": rule["rule_id"],
                         "severity": rule["severity"],
                         "description": (
@@ -97,10 +94,11 @@ def evaluate_readiness(
 
             for document in matched_documents:
                 matched = True
-
                 issues.append(
                     {
                         "category": "document",
+                        "issue_type": "missing_document",
+                        "issue_reference": document["document_id"],
                         "rule_id": rule["rule_id"],
                         "severity": rule["severity"],
                         "description": (
@@ -119,10 +117,11 @@ def evaluate_readiness(
 
             for document in matched_documents:
                 matched = True
-
                 issues.append(
                     {
                         "category": "document",
+                        "issue_type": "expiring_document",
+                        "issue_reference": document["document_id"],
                         "rule_id": rule["rule_id"],
                         "severity": rule["severity"],
                         "description": (
@@ -130,10 +129,6 @@ def evaluate_readiness(
                         ),
                     }
                 )
-
-        # ---------------------------------------------------------
-        # TRAINING RULES
-        # ---------------------------------------------------------
 
         elif condition == "missing_mandatory_training":
             matched_training = [
@@ -145,10 +140,11 @@ def evaluate_readiness(
 
             for training in matched_training:
                 matched = True
-
                 issues.append(
                     {
                         "category": "training",
+                        "issue_type": "missing_training",
+                        "issue_reference": training["training_id"],
                         "rule_id": rule["rule_id"],
                         "severity": rule["severity"],
                         "description": (
@@ -167,10 +163,11 @@ def evaluate_readiness(
 
             for training in matched_training:
                 matched = True
-
                 issues.append(
                     {
                         "category": "training",
+                        "issue_type": "expired_training",
+                        "issue_reference": training["training_id"],
                         "rule_id": rule["rule_id"],
                         "severity": rule["severity"],
                         "description": (
@@ -178,10 +175,6 @@ def evaluate_readiness(
                         ),
                     }
                 )
-
-        # ---------------------------------------------------------
-        # INSPECTION RULES
-        # ---------------------------------------------------------
 
         elif condition == "failed_required_inspection":
             matched_inspections = [
@@ -192,23 +185,19 @@ def evaluate_readiness(
 
             for inspection in matched_inspections:
                 matched = True
-
                 issues.append(
                     {
                         "category": "inspection",
+                        "issue_type": "failed_inspection",
+                        "issue_reference": inspection["inspection_id"],
                         "rule_id": rule["rule_id"],
                         "severity": rule["severity"],
                         "description": (
                             f"{inspection['inspection_type']} inspection "
-                            f"failed with "
-                            f"{inspection['findings_count']} findings."
+                            f"failed with {inspection['findings_count']} findings."
                         ),
                     }
                 )
-
-        # ---------------------------------------------------------
-        # CORRECTIVE ACTION RULES
-        # ---------------------------------------------------------
 
         elif condition == "high_priority_overdue_action":
             matched_actions = [
@@ -220,10 +209,11 @@ def evaluate_readiness(
 
             for action in matched_actions:
                 matched = True
-
                 issues.append(
                     {
                         "category": "corrective_action",
+                        "issue_type": "overdue_corrective_action",
+                        "issue_reference": action["action_id"],
                         "rule_id": rule["rule_id"],
                         "severity": rule["severity"],
                         "description": (
@@ -243,10 +233,11 @@ def evaluate_readiness(
 
             for action in matched_actions:
                 matched = True
-
                 issues.append(
                     {
                         "category": "corrective_action",
+                        "issue_type": "open_corrective_action",
+                        "issue_reference": action["action_id"],
                         "rule_id": rule["rule_id"],
                         "severity": rule["severity"],
                         "description": (
@@ -256,19 +247,10 @@ def evaluate_readiness(
                     }
                 )
 
-        # ---------------------------------------------------------
-        # BASELINE READY RULE
-        # ---------------------------------------------------------
-
         elif condition == "all_required_checks_pass":
             # READY is the baseline result.
-            # Higher-priority results such as ATTENTION_REQUIRED
-            # or NOT_READY will override it below.
+            # Higher-priority results override it below.
             matched = True
-
-        # ---------------------------------------------------------
-        # UNKNOWN RULE
-        # ---------------------------------------------------------
 
         else:
             raise ValueError(
@@ -276,20 +258,9 @@ def evaluate_readiness(
                 f"for rule '{rule['rule_id']}'."
             )
 
-        # ---------------------------------------------------------
-        # APPLY RESULT
-        # ---------------------------------------------------------
-
         if matched:
-            if (
-                STATUS_PRIORITY[rule_result]
-                > STATUS_PRIORITY[current_status]
-            ):
+            if STATUS_PRIORITY[rule_result] > STATUS_PRIORITY[current_status]:
                 current_status = rule_result
-
-    # -------------------------------------------------------------
-    # RISK LEVEL
-    # -------------------------------------------------------------
 
     if current_status == "NOT_READY":
         risk_level = "HIGH"
@@ -297,10 +268,6 @@ def evaluate_readiness(
         risk_level = "MEDIUM"
     else:
         risk_level = "LOW"
-
-    # -------------------------------------------------------------
-    # FINAL RESULT
-    # -------------------------------------------------------------
 
     return {
         "contractor_id": contractor["contractor_id"],
