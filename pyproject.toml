@@ -1,0 +1,12 @@
+[project]
+name = "sitready-ai"
+version = "0.1.0"
+description = "Autonomous contractor readiness agent for Health & Safety and SHEQ teams."
+requires-python = ">=3.13"
+dependencies = [
+    "google-adk[gcp]>=2.0.0,<3.0.0",
+    "google-cloud-firestore>=2.25.0",
+]
+
+[tool.uv]
+package = false
