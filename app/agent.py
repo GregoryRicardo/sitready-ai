@@ -4,6 +4,9 @@ from google.adk.models import Gemini
 from agent.tools.contractor_tools import get_contractor
 from agent.tools.readiness_tools import assess_contractor_readiness
 
+from agent.tools.followup_orchestration import (
+    create_followup_actions_for_readiness,
+)
 
 MODEL = "gemini-3.6-flash"
 
@@ -61,5 +64,6 @@ Rules:
     tools=[
         lookup_contractor,
         assess_contractor_readiness,
+	create_followup_actions_for_readiness,
     ],
 )
