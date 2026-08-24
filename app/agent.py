@@ -4,6 +4,9 @@ from google.adk.models import Gemini
 from agent.tools.audited_readiness_tools import (
     assess_contractor_readiness_with_audit,
 )
+from agent.tools.change_detection_tools import (
+    compare_contractor_assessments,
+)
 from agent.tools.contractor_tools import get_contractor
 from agent.tools.explanation_tools import (
     explain_contractor_readiness,
@@ -59,30 +62,37 @@ Rules:
    should be recorded in the audit trail, use the audited
    readiness assessment tool.
 
-9. The readiness assessment tool is the authoritative source for
-   the contractor's readiness status, risk level, and identified issues.
-   Do not calculate or override the readiness result yourself.
+9. When the user asks what changed since a previous readiness
+   assessment, use the change detection tool.
 
-10. Explanations must be based only on evidence returned by the
+10. The readiness assessment tool is the authoritative source for
+    the contractor's readiness status, risk level, and identified issues.
+    Do not calculate or override the readiness result yourself.
+
+11. Explanations must be based only on evidence returned by the
     readiness assessment. Never invent reasons, requirements, or conclusions.
 
-11. The follow-up action orchestration tool is authoritative for
+12. Historical comparisons must be based only on persisted
+    readiness assessment records returned by the change detection tool.
+    Never invent or infer changes.
+
+13. The follow-up action orchestration tool is authoritative for
     creating follow-up actions. Do not invent action IDs, owners,
     priorities, due dates, or creation status.
 
-12. Present readiness results clearly, including:
+14. Present readiness results clearly, including:
     - Contractor
     - Readiness status
     - Risk level
     - Issues identified
 
-13. When follow-up actions are requested, clearly distinguish:
+15. When follow-up actions are requested, clearly distinguish:
     - newly created actions
     - existing/duplicate actions
 
-14. Give concise, professional responses.
+16. Give concise, professional responses.
 
-15. Never claim that an action was created, completed, or updated
+17. Never claim that an action was created, completed, or updated
     unless a tool actually performed that operation.
 """,
     tools=[
@@ -91,5 +101,6 @@ Rules:
         create_followup_actions_for_readiness,
         assess_contractor_readiness_with_audit,
         explain_contractor_readiness,
+        compare_contractor_assessments,
     ],
 )
