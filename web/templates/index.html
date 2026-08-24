@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SiteReady AI</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <main class="container">
+        <header>
+            <div>
+                <h1>SiteReady AI</h1>
+                <p>Contractor Readiness Operations Console</p>
+            </div>
+            <span id="system-status" class="status">Checking...</span>
+        </header>
+
+        <section class="card">
+            <label for="contractor-id">Contractor ID</label>
+            <div class="input-row">
+                <input
+                    id="contractor-id"
+                    value="C003"
+                    placeholder="e.g. C003"
+                >
+                <button onclick="assessContractor()">
+                    Assess
+                </button>
+            </div>
+        </section>
+
+        <section id="readiness-card" class="card hidden">
+            <div class="readiness-header">
+                <div>
+                    <h2 id="contractor-name">Contractor</h2>
+                    <p id="contractor-id-display"></p>
+                </div>
+                <div>
+                    <span id="readiness-status"></span>
+                    <span id="risk-level"></span>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button onclick="explainContractor()">
+                    Why?
+                </button>
+
+                <button onclick="compareContractor()">
+                    What Changed?
+                </button>
+
+                <button onclick="proposeActions()">
+                    Prepare Follow-ups
+                </button>
+            </div>
+        </section>
+
+        <section id="results" class="card hidden">
+            <h2>AI Findings</h2>
+            <div id="results-content"></div>
+        </section>
+
+        <section id="approval-card" class="card hidden">
+    <h2>Human Approval Required</h2>
+
+    <p id="approval-message">
+        Follow-up actions are awaiting human approval.
+    </p>
+
+    <div class="approval-box">
+        <strong>Approval ID</strong>
+        <code id="approval-id"></code>
+
+        <strong>Status</strong>
+        <span id="approval-status">
+            Pending Human Approval
+        </span>
+    </div>
+
+    <button
+        id="approve-button"
+        onclick="approveActions()"
+    >
+        Approve Actions
+    </button>
+</section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
