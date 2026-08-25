@@ -3,15 +3,7 @@ import os
 from google.cloud import firestore
 
 
-PROJECT_ID = os.getenv(
-    "GOOGLE_CLOUD_PROJECT",
-    "sitready-ai-506306",
-)
-
-ENVIRONMENT = os.getenv(
-    "SITEREADY_ENV",
-    "local",
-).lower()
+DEFAULT_PROJECT_ID = "sitready-ai-506306"
 
 
 def get_firestore_client() -> firestore.Client:
@@ -23,12 +15,27 @@ def get_firestore_client() -> firestore.Client:
         accidentally connect to production Firestore.
 
     cloud:
-        Uses the real Google Cloud Firestore service.
+        Uses real Google Cloud Firestore and explicitly rejects the
+        emulator setting.
+
+    Any unsupported environment fails fast.
     """
 
-    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST")
+    project_id = os.getenv(
+        "GOOGLE_CLOUD_PROJECT",
+        DEFAULT_PROJECT_ID,
+    )
 
-    if ENVIRONMENT == "local":
+    environment = os.getenv(
+        "SITEREADY_ENV",
+        "local",
+    ).strip().lower()
+
+    emulator_host = os.getenv(
+        "FIRESTORE_EMULATOR_HOST"
+    )
+
+    if environment == "local":
         if not emulator_host:
             raise RuntimeError(
                 "SITEREADY_ENV is set to 'local', but "
@@ -37,22 +44,23 @@ def get_firestore_client() -> firestore.Client:
             )
 
         return firestore.Client(
-            project=PROJECT_ID,
+            project=project_id,
         )
 
-    if ENVIRONMENT == "cloud":
+    if environment == "cloud":
         if emulator_host:
             raise RuntimeError(
                 "SITEREADY_ENV is set to 'cloud', but "
                 "FIRESTORE_EMULATOR_HOST is still set. "
-                "Remove the emulator variable before using cloud Firestore."
+                "Remove the emulator variable before using "
+                "Cloud Firestore."
             )
 
         return firestore.Client(
-            project=PROJECT_ID,
+            project=project_id,
         )
 
     raise RuntimeError(
-        f"Unsupported SITEREADY_ENV '{ENVIRONMENT}'. "
+        f"Unsupported SITEREADY_ENV '{environment}'. "
         "Expected 'local' or 'cloud'."
     )
