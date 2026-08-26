@@ -16,7 +16,10 @@ from agent.tools.followup_orchestration import (
     create_followup_actions_for_readiness,
 )
 from agent.tools.human_attention_tools import create_human_attention
-from agent.tools.notification_tools import create_human_notification_events
+from agent.tools.notification_tools import (
+    create_human_notification_events,
+    schedule_demo_whatsapp_escalation,
+)
 
 
 def _requires_human_approval(
@@ -109,6 +112,10 @@ def run_taskmaster_workflow(contractor_id: str) -> dict[str, Any]:
         proposal = propose_followup_actions(contractor_id)
         attention = create_human_attention(proposal)
         notifications = create_human_notification_events(attention)
+        escalation_schedule = schedule_demo_whatsapp_escalation(
+            str(proposal.get("approval_id", "")),
+            delay_seconds=30,
+        )
 
         workflow_steps.extend(
             [
@@ -130,6 +137,12 @@ def run_taskmaster_workflow(contractor_id: str) -> dict[str, Any]:
                         item.get("notification_id") for item in notifications
                     ],
                     "mode": "demo_simulation",
+                },
+                {
+                    "step": "escalation_schedule",
+                    "status": "scheduled",
+                    "delay_seconds": escalation_schedule["delay_seconds"],
+                    "mode": escalation_schedule["mode"],
                 },
                 {
                     "step": "followup_proposal",
@@ -158,12 +171,13 @@ def run_taskmaster_workflow(contractor_id: str) -> dict[str, Any]:
             "approval": proposal,
             "human_attention": attention,
             "notifications": notifications,
+            "escalation_schedule": escalation_schedule,
             "workflow_steps": workflow_steps,
             "message": (
                 "The Taskmaster workflow completed its investigation, created "
                 "a practitioner attention item, recorded notification events, "
-                "and prepared the required follow-up actions. Consequential work "
-                "requires human approval."
+                "scheduled the demo escalation, and prepared the required "
+                "follow-up actions. Consequential work requires human approval."
             ),
         }
 
