@@ -2,44 +2,66 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
     <title>SiteReady AI</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
     <main class="container">
+
         <header>
             <div>
                 <h1>SiteReady AI</h1>
                 <p>Contractor Readiness Operations Console</p>
             </div>
-            <span id="system-status" class="status">Checking...</span>
+
+            <span id="system-status" class="status">
+                Checking...
+            </span>
         </header>
 
         <section class="card">
-            <label for="contractor-id">Contractor ID</label>
+            <label for="contractor-id">
+                Contractor ID
+            </label>
+
             <div class="input-row">
                 <input
                     id="contractor-id"
                     value="C003"
                     placeholder="e.g. C003"
+                    autocomplete="off"
                 >
+
                 <button onclick="assessContractor()">
                     Assess
                 </button>
             </div>
         </section>
 
-        <section id="readiness-card" class="card hidden">
+        <section
+            id="readiness-card"
+            class="card hidden"
+        >
             <div class="readiness-header">
+
                 <div>
-                    <h2 id="contractor-name">Contractor</h2>
+                    <h2 id="contractor-name">
+                        Contractor
+                    </h2>
+
                     <p id="contractor-id-display"></p>
                 </div>
-                <div>
+
+                <div class="readiness-summary">
                     <span id="readiness-status"></span>
                     <span id="risk-level"></span>
                 </div>
+
             </div>
 
             <div class="actions">
@@ -54,38 +76,126 @@
                 <button onclick="proposeActions()">
                     Prepare Follow-ups
                 </button>
+
+                <div class="taskmaster-action">
+                    <button onclick="runTaskmaster()">
+                        Run Taskmaster
+                    </button>
+
+                    <span
+                        class="info-icon"
+                        title="Taskmaster is SiteReady's goal-driven agent. It reviews contractor evidence, determines what action is permitted, executes routine work autonomously, requires human approval for consequential work, and verifies the outcome."
+                        aria-label="What is Taskmaster?"
+                        role="img"
+                    >&#9432;</span>
+                </div>
             </div>
         </section>
 
-        <section id="results" class="card hidden">
+        <!-- Judge-facing explanation of the Taskmaster agent. -->
+        <section
+            id="taskmaster-card"
+            class="card hidden"
+        >
+            <div class="taskmaster-header">
+                <div>
+                    <h2>Taskmaster Agent</h2>
+
+                    <p class="section-subtitle">
+                        SiteReady's goal-driven execution
+                        and governance agent
+                    </p>
+                </div>
+            </div>
+
+            <p class="taskmaster-description">
+                Taskmaster takes the contractor-readiness goal,
+                reviews the available evidence, determines what
+                action is permitted, executes routine work
+                autonomously, and stops for human approval when
+                the work is consequential.
+            </p>
+
+            <div class="taskmaster-flow">
+                <span>ASSESS</span>
+                <span>&rarr;</span>
+                <span>COMPARE</span>
+                <span>&rarr;</span>
+                <span>EXPLAIN</span>
+                <span>&rarr;</span>
+                <span>DECIDE</span>
+                <span>&rarr;</span>
+                <span>ACT / APPROVE</span>
+                <span>&rarr;</span>
+                <span>VERIFY</span>
+            </div>
+        </section>
+
+        <!-- Live workflow evidence returned by Taskmaster. -->
+        <section
+            id="agent-activity-card"
+            class="card hidden"
+        >
+            <div class="section-heading">
+                <div>
+                    <h2>Agent Activity</h2>
+
+                    <p class="section-subtitle">
+                        What the Taskmaster agent is doing right now
+                    </p>
+                </div>
+            </div>
+
+            <div id="agent-activity"></div>
+        </section>
+
+        <section
+            id="results"
+            class="card hidden"
+        >
             <h2>AI Findings</h2>
+
             <div id="results-content"></div>
         </section>
 
-        <section id="approval-card" class="card hidden">
-    <h2>Human Approval Required</h2>
+        <section
+            id="approval-card"
+            class="card hidden"
+        >
+            <h2>Human Approval Required</h2>
 
-    <p id="approval-message">
-        Follow-up actions are awaiting human approval.
-    </p>
+            <p id="approval-message">
+                Follow-up actions are awaiting human approval.
+            </p>
 
-    <div class="approval-box">
-        <strong>Approval ID</strong>
-        <code id="approval-id"></code>
+            <div class="approval-box">
 
-        <strong>Status</strong>
-        <span id="approval-status">
-            Pending Human Approval
-        </span>
-    </div>
+                <strong>Approval ID</strong>
+                <code id="approval-id"></code>
 
-    <button
-        id="approve-button"
-        onclick="approveActions()"
-    >
-        Approve Actions
-    </button>
-</section>
+                <strong>Status</strong>
+                <span id="approval-status">
+                    Pending Human Approval
+                </span>
+            </div>
+
+            <button
+                id="approve-button"
+                onclick="approveActions()"
+            >
+                Approve Actions
+            </button>
+        </section>
+
+        <footer class="technology-footer">
+            Powered by
+            <span>Google ADK</span>
+            <span>&middot;</span>
+            <span>Gemini 3.6 Flash</span>
+            <span>&middot;</span>
+            <span>Google Cloud</span>
+        </footer>
+
     </main>
 
     <script src="/static/app.js"></script>

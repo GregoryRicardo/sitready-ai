@@ -71,20 +71,375 @@ function showResults(title, html) {
 }
 
 
+function showTaskmasterExplainer() {
+    const card = document.getElementById(
+        "taskmaster-card"
+    );
+
+    if (!card) {
+        return;
+    }
+
+    card.classList.remove("hidden");
+}
+
+
+function showAgentActivity(steps) {
+    const card = document.getElementById(
+        "agent-activity-card"
+    );
+
+    const container = document.getElementById(
+        "agent-activity"
+    );
+
+    if (!card || !container) {
+        return;
+    }
+
+    card.classList.remove("hidden");
+
+    if (!steps || !steps.length) {
+        container.innerHTML = `
+            <div class="activity-empty">
+                No workflow steps were returned.
+            </div>
+        `;
+
+        return;
+    }
+
+    const stepLabels = {
+        assessment: "Assessment",
+        historical_comparison: "Historical comparison",
+        explanation: "Evidence-backed explanation",
+        execution_policy: "Execution policy",
+        autonomous_execution: "Autonomous execution",
+        human_approval: "Human approval",
+        action_creation: "Action creation",
+        verification: "Verification",
+    };
+
+    container.innerHTML = steps
+        .map((step, index) => {
+            const stepName =
+                stepLabels[step.step] ||
+                formatStepName(step.step);
+
+            const status =
+                step.status || "unknown";
+
+            const stateClass =
+                getActivityStateClass(
+                    status,
+                    step.step
+                );
+
+            const icon =
+                getActivityIcon(
+                    status,
+                    step.step
+                );
+
+            const detail =
+                getActivityDetail(step);
+
+            return `
+                <div class="activity-step ${stateClass}">
+                    <div class="activity-icon">
+                        ${icon}
+                    </div>
+
+                    <div class="activity-content">
+                        <div class="activity-title">
+                            <span>
+                                ${index + 1}. ${stepName}
+                            </span>
+
+                            <span class="activity-status">
+                                ${formatStepName(status)}
+                            </span>
+                        </div>
+
+                        ${
+                            detail
+                                ? `
+                                    <div class="activity-detail">
+                                        ${detail}
+                                    </div>
+                                  `
+                                : ""
+                        }
+                    </div>
+                </div>
+            `;
+        })
+        .join("");
+}
+
+
+function formatStepName(value) {
+    if (!value) {
+        return "";
+    }
+
+    return String(value)
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+
+function getActivityStateClass(status, step) {
+    if (
+        status === "approval_required" ||
+        step === "human_approval"
+    ) {
+        return "activity-warning";
+    }
+
+    if (
+        status === "autonomous_execution" ||
+        step === "autonomous_execution"
+    ) {
+        return "activity-autonomous";
+    }
+
+    if (status === "completed") {
+        return "activity-completed";
+    }
+
+    if (
+        status === "pending" ||
+        status === "awaiting_human_approval"
+    ) {
+        return "activity-pending";
+    }
+
+    return "activity-default";
+}
+
+
+function getActivityIcon(status, step) {
+    if (
+        status === "approval_required" ||
+        step === "human_approval"
+    ) {
+        return "\u{1F6D1}";
+    }
+
+    if (
+        status === "autonomous_execution" ||
+        step === "autonomous_execution"
+    ) {
+        return "\u26A1";
+    }
+
+    if (status === "completed") {
+        return "\u2713";
+    }
+
+    if (
+        status === "pending" ||
+        status === "awaiting_human_approval"
+    ) {
+        return "\u23F3";
+    }
+
+    return "\u2022";
+}
+
+
+function getActivityDetail(step) {
+    if (step.step === "execution_policy") {
+        if (step.status === "autonomous_execution") {
+            return (
+                "Routine work permitted under the execution policy."
+            );
+        }
+
+        if (step.status === "approval_required") {
+            const reasons = step.reasons || [];
+
+            return reasons.length
+                ? reasons.join(" ")
+                : (
+                    "Human approval is required before " +
+                    "consequential actions."
+                );
+        }
+    }
+
+    if (step.step === "explanation") {
+        if (step.issue_count !== undefined) {
+            return `${step.issue_count} issue(s) explained.`;
+        }
+    }
+
+    if (step.step === "action_creation") {
+        if (step.action_count !== undefined) {
+            return (
+                `${step.action_count} follow-up action(s) created.`
+            );
+        }
+    }
+
+    if (step.step === "verification") {
+        if (step.verified !== undefined) {
+            return step.verified
+                ? "Execution results verified successfully."
+                : "Verification reported failures.";
+        }
+    }
+
+    if (step.message) {
+        return step.message;
+    }
+
+    return "";
+}
+
+
+async function runTaskmaster() {
+    const button = document.querySelector(
+        'button[onclick="runTaskmaster()"]'
+    );
+
+    try {
+        if (button) {
+            button.disabled = true;
+            button.textContent = "Running...";
+        }
+
+        const id = contractorId();
+
+        if (!id) {
+            alert("Please enter a contractor ID.");
+            return;
+        }
+
+        const data = await apiPost(
+            `/api/taskmaster/${id}`
+        );
+
+        showTaskmasterExplainer();
+
+        showReadiness(data);
+
+        showAgentActivity(
+            data.workflow_steps || []
+        );
+
+        const execution = data.execution || {};
+
+        const actions =
+            execution.actions || [];
+
+        const approval =
+            data.approval || null;
+
+        let resultHtml = `
+            <p>
+                <strong>Workflow:</strong>
+                ${formatStepName(
+                    data.workflow_status
+                )}
+            </p>
+
+            <p>
+                <strong>Execution mode:</strong>
+                ${formatStepName(
+                    data.execution_mode
+                )}
+            </p>
+
+            <p>
+                <strong>Risk:</strong>
+                ${data.risk_level}
+            </p>
+        `;
+
+        if (
+            data.approval_required &&
+            approval
+        ) {
+            resultHtml += `
+                <p>
+                    <strong>
+                        Human approval required.
+                    </strong>
+                </p>
+            `;
+
+            showApproval(approval);
+
+        } else if (actions.length) {
+            resultHtml += `
+                <p>
+                    <strong>
+                        ${actions.length}
+                    </strong>
+                    follow-up action(s) returned.
+                </p>
+            `;
+        }
+
+        if (
+            data.verification &&
+            data.verification.verified !== undefined
+        ) {
+            resultHtml += `
+                <p>
+                    <strong>Verification:</strong>
+                    ${
+                        data.verification.verified
+                            ? "Passed"
+                            : "Failed"
+                    }
+                </p>
+            `;
+        }
+
+        showResults(
+            "Taskmaster Result",
+            resultHtml
+        );
+
+    } catch (error) {
+        alert(error.message);
+
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Run Taskmaster";
+        }
+    }
+}
+
+
 function showApproval(data) {
     const approvalCard =
-        document.getElementById("approval-card");
+        document.getElementById(
+            "approval-card"
+        );
+
+    if (!approvalCard) {
+        return;
+    }
 
     approvalCard.classList.remove("hidden");
 
     const approvalIdElement =
-        document.getElementById("approval-id");
+        document.getElementById(
+            "approval-id"
+        );
 
     approvalIdElement.textContent =
         data.approval_id || "";
 
     const approvalStatusElement =
-        document.getElementById("approval-status");
+        document.getElementById(
+            "approval-status"
+        );
 
     approvalStatusElement.textContent =
         data.status === "pending"
@@ -92,14 +447,22 @@ function showApproval(data) {
             : data.status || "Unknown";
 
     const approvalMessageElement =
-        document.getElementById("approval-message");
+        document.getElementById(
+            "approval-message"
+        );
 
     approvalMessageElement.textContent =
         data.message ||
         "Follow-up actions are awaiting human approval.";
 
     const approveButton =
-        document.getElementById("approve-button");
+        document.getElementById(
+            "approve-button"
+        );
+
+    if (!approveButton) {
+        return;
+    }
 
     const isPending =
         data.status === "pending";
@@ -140,6 +503,7 @@ async function assessContractor() {
                         <strong>
                             ${issue.issue_reference}
                         </strong>
+
                         <div>
                             ${issue.description}
                         </div>
@@ -152,9 +516,15 @@ async function assessContractor() {
             "Readiness Assessment",
             `
                 <p>
-                    <strong>${data.issue_count || (data.issues || []).length}</strong>
+                    <strong>
+                        ${
+                            data.issue_count ||
+                            (data.issues || []).length
+                        }
+                    </strong>
                     issues identified.
                 </p>
+
                 ${issues}
             `
         );
@@ -192,7 +562,7 @@ async function explainContractor() {
                             </div>
 
                             <small>
-                                ${item.impact}
+                                ${item.impact || ""}
                             </small>
                         </div>
                     `
@@ -240,6 +610,7 @@ async function compareContractor() {
                             <strong>
                                 ${issue.issue_reference}
                             </strong>
+
                             <div>
                                 ${issue.description}
                             </div>
@@ -256,6 +627,7 @@ async function compareContractor() {
                             <strong>
                                 ${issue.issue_reference}
                             </strong>
+
                             <div>
                                 ${issue.description}
                             </div>
@@ -421,7 +793,13 @@ async function approveActions() {
     }
 
     const button =
-        document.getElementById("approve-button");
+        document.getElementById(
+            "approve-button"
+        );
+
+    if (!button) {
+        return;
+    }
 
     try {
         button.disabled = true;
