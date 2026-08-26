@@ -55,7 +55,7 @@ def test_human_notification_events_are_created_and_scheduled(clean_taskmaster_st
     assert by_channel[CHANNEL_WHATSAPP]["escalation_due_at"]
     assert by_channel[CHANNEL_WHATSAPP]["mode"] == "demo_simulation"
     assert result["escalation_schedule"]["approval_id"] == approval_id
-    assert result["escalation_schedule"]["delay_seconds"] == DEMO_ESCALATION_DELAY_SECONDS == 60
+    assert result["escalation_schedule"]["delay_seconds"] == DEMO_ESCALATION_DELAY_SECONDS == 120
 
     scheduled_at = datetime.fromisoformat(
         result["escalation_schedule"]["scheduled_at"]
