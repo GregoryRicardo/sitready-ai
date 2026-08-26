@@ -13,7 +13,7 @@ SiteReady AI turns contractor-readiness evidence into a controlled, action-orien
 
 The repository contains a Google ADK `Agent` configured with `Gemini(model="gemini-3.6-flash")`. The direct ADK/Gemini runner is `run_agent.py`.
 
-The production web console invokes the authoritative deterministic Taskmaster workflow directly from FastAPI. This separation is intentional: Gemini provides the model reasoning layer in the ADK agent path, while SiteReady tools and Taskmaster policy control evidence, execution boundaries, persistence, approval, escalation and verification.
+The production web console now invokes the Taskmaster workflow through an ADK/Gemini bridge. Gemini selects the authoritative `run_taskmaster_workflow` tool, while SiteReady tools and Taskmaster policy control evidence, execution boundaries, persistence, approval, escalation and verification.
 
 ## What SiteReady does
 
@@ -51,7 +51,7 @@ Human attention
     ↓
 Notification audit event
     ↓
-30-second demo escalation schedule
+60-second+ demo escalation schedule
     ↓
 DEMO — ESCALATION TRIGGERED
     ↓
@@ -61,6 +61,8 @@ Action creation
     ↓
 Verification
 ```
+
+For the current judge demo build, the configured demo escalation window is **60 seconds**. The UI displays the persisted countdown and automatically reconciles the due event through the notification polling path.
 
 The system is designed around **controlled autonomy** rather than unrestricted automation.
 
@@ -94,6 +96,28 @@ After explicit approval through the production approval endpoint, five C003 foll
 
 ## Architecture
 
+### Production web path
+
+```text
+User / UI
+    ↓
+Cloud Run / FastAPI
+    ↓
+ADK Agent
+    ↓
+Gemini 3.6 Flash
+    ↓
+run_taskmaster_workflow tool
+    ↓
+Taskmaster policy + SiteReady tools
+    ↓
+Human attention / autonomous action
+    ↓
+Firestore + verification
+```
+
+The ADK agent exposes `run_taskmaster_workflow` as an authoritative tool. Gemini provides the model reasoning/orchestration layer; the deterministic Taskmaster workflow remains responsible for policy, persistence, approval boundaries, notification state, escalation, and verification.
+
 ### Direct ADK/Gemini path
 
 ```text
@@ -108,23 +132,7 @@ SiteReady tools
 Taskmaster workflow
 ```
 
-### Production web path
-
-```text
-User / UI
-    ↓
-Cloud Run
-    ↓
-FastAPI
-    ↓
-Taskmaster workflow
-    ↓
-SiteReady tools
-    ↓
-Firestore
-```
-
-The production web path is deterministic and authoritative. The ADK/Gemini path is provided separately through `run_agent.py` for direct model-driven agent execution and evidence.
+This direct path is exercised by `run_agent.py` and provides a separate, judge-visible proof of the ADK/Gemini integration.
 
 ## Firestore data model
 
@@ -228,15 +236,15 @@ For a concise Taskmaster demonstration:
 
 1. Run the Taskmaster workflow for `C002` and show autonomous completion plus verification.
 2. Run the Taskmaster workflow for `C003` and show `awaiting_human_approval` and the human-attention boundary.
-3. Show the notification audit log and the 30-second demo escalation countdown.
+3. Show the notification audit log and the **60-second demo escalation countdown**.
 4. Let the countdown reach zero and show `DEMO — ESCALATION TRIGGERED` without pressing an escalation button.
 5. Show the pending approval ID and confirm no C003 actions exist before approval.
 6. Approve the exact approval ID through `/api/approve/{approval_id}`.
 7. Show the five C003 actions created and human attention resolved.
 8. Briefly demonstrate duplicate protection by repeating the C003 workflow request.
-9. If the judging criteria require direct proof of Gemini/ADK execution, run `run_agent.py` and show the ADK agent responding to the C003 readiness prompt.
+9. Run `run_agent.py` when a direct ADK/Gemini proof is useful during judging.
 
-This demonstrates the core product principle: **the agent acts autonomously where policy permits and stops for human control where the work is consequential.**
+This demonstrates the core product principle: **the agent reasons and orchestrates through Gemini/ADK, acts autonomously where policy permits, and stops for human control where the work is consequential.**
 
 ## Validation record
 
