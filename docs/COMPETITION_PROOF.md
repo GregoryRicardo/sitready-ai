@@ -7,7 +7,9 @@
 **Gemini model:** `gemini-3.6-flash`  
 **Google Cloud:** Cloud Run + Cloud Firestore
 
-The repository contains a Google ADK `Agent` configured with `Gemini(model="gemini-3.6-flash")`. The ADK runner is provided in `run_agent.py` for model-driven agent execution. The production web console exposes the deterministic SiteReady Taskmaster workflow directly through the FastAPI API.
+The repository contains a Google ADK `Agent` configured with `Gemini(model="gemini-3.6-flash")`. The ADK runner is provided in `run_agent.py` for direct model-driven agent execution.
+
+The production web console exposes the authoritative deterministic SiteReady Taskmaster workflow through FastAPI. The submission should therefore distinguish the **ADK/Gemini agent path** from the **production web Taskmaster path** rather than implying that Gemini itself performs every deterministic database operation.
 
 ## 2. What the Agent Does
 
@@ -36,6 +38,24 @@ Apply execution policy
                          verification
 ```
 
+For the human-governance scenario, the workflow additionally provides:
+
+```text
+Human attention
+      ↓
+Notification event
+      ↓
+30-second demo escalation schedule
+      ↓
+DEMO — ESCALATION TRIGGERED
+      ↓
+Human approval
+      ↓
+Action creation
+      ↓
+Verification
+```
+
 The design principle is **controlled autonomy**: the agent can execute permitted routine work, but consequential work is stopped at an explicit human-approval boundary.
 
 ## 3. Technology Responsibilities
@@ -46,11 +66,11 @@ Provides the model reasoning capability for the Google ADK SiteReady agent.
 
 ### Google ADK
 
-Provides the agent framework, model integration, session/runtime support, and tool orchestration used by the SiteReady agent.
+Provides the agent framework, model integration, session/runtime support, and tool orchestration used by the direct ADK agent path.
 
 ### SiteReady tools
 
-Provide deterministic access to contractor evidence, readiness data, historical comparisons, explanations, action creation, approval records, and verification.
+Provide deterministic access to contractor evidence, readiness data, historical comparisons, explanations, action creation, approval records, notification records, and verification.
 
 ### Taskmaster policy
 
@@ -62,7 +82,7 @@ Hosts the production FastAPI application and Taskmaster API workflow.
 
 ### Firestore
 
-Stores contractor evidence, readiness state, follow-up actions, approval records, and workflow audit state.
+Stores contractor evidence, readiness state, follow-up actions, approval records, human-attention items, notification events, and workflow audit state.
 
 ## 4. Important Architecture Boundary
 
@@ -73,6 +93,7 @@ The ADK agent exposes `run_taskmaster_workflow` as one of its available tools, w
 The repository therefore demonstrates both:
 
 ```text
+Direct ADK/Gemini path:
 Google ADK Agent
       ↓
 Gemini 3.6 Flash
@@ -159,7 +180,31 @@ duplicate      = false
 
 All five C003 follow-up actions were then confirmed in production Firestore with status `open` and priority `high`.
 
-## 7. Idempotency / Duplicate Protection
+## 7. Notification and Escalation Demo Evidence
+
+The local emulator demonstration adds a judge-visible human-attention and escalation layer.
+
+Initial state:
+
+```text
+EMAIL     | SIMULATED
+WHATSAPP  | DEMO — SCHEDULED
+countdown | 30 seconds
+```
+
+After the threshold:
+
+```text
+WHATSAPP  | DEMO — ESCALATION TRIGGERED
+```
+
+The audit record includes a notification ID, recipient role(s), approval ID, timestamp, escalation reason, and triggered status.
+
+Important: this is **demo simulation / audit evidence**, not proof that an external WhatsApp message was delivered. The implementation explicitly records that no external WhatsApp message was sent.
+
+The escalation is reconciled through the notification log/polling flow using the persisted `escalation_due_at` timestamp. This is sufficient for the competition demo, but it should not be described as a Cloud Scheduler/Cloud Tasks background job.
+
+## 8. Idempotency / Duplicate Protection
 
 A repeat C003 approval scenario was executed while the five follow-up actions already existed.
 
@@ -174,19 +219,19 @@ duplicate  = true
 
 This demonstrates that repeated execution does not blindly duplicate open consequential actions.
 
-## 8. Local Automated Validation
+## 9. Local Automated Validation
 
-The repository test suite was hardened around a shared pytest Firestore fixture and local emulator setup.
+The repository test suite is hardened around a shared pytest Firestore fixture and local emulator setup.
 
-Final local regression result:
+Current local regression checkpoint:
 
 ```text
-11 passed in 2.57s
+15 passed
 ```
 
-The tests cover readiness, audit/explanation, change detection, end-to-end readiness, follow-up approval, Taskmaster API behavior, and Taskmaster workflow behavior.
+The expanded suite covers readiness, audit/explanation, change detection, end-to-end readiness, follow-up approval, human attention, Taskmaster API/workflow behavior, and notification/escalation behavior.
 
-## 9. Judge-Facing UI Evidence
+## 10. Judge-Facing UI Evidence
 
 The web console exposes the Taskmaster workflow directly to the user.
 
@@ -201,13 +246,16 @@ The Agent Activity panel renders the workflow steps returned by the Taskmaster b
 
 The interface also exposes:
 
-- a concise Taskmaster definition tooltip;
-- a human-approval boundary for consequential work;
+- visible Taskmaster explanation via the `i` control;
+- human-attention queue;
 - approval ID and status;
+- notification and escalation audit log;
+- live demo escalation countdown;
+- escalation trigger state;
 - verification results;
 - technology visibility through `Powered by Google ADK · Gemini 3.6 Flash · Google Cloud`.
 
-## 10. Production API Entry Points
+## 11. Production API Entry Points
 
 Production Cloud Run service:
 
@@ -225,13 +273,13 @@ POST /api/taskmaster/{contractor_id}
 POST /api/approve/{approval_id}
 ```
 
-## 11. Evidence Summary
+## 12. Evidence Summary
 
 | Evidence | Result |
 |---|---|
 | Gemini 3.6 Flash configured | ✅ |
 | Google ADK Agent configured | ✅ |
-| ADK runner available | ✅ |
+| Direct ADK runner available | ✅ |
 | Google Cloud production deployment | ✅ |
 | Cloud Run health | ✅ |
 | Production Firestore | ✅ |
@@ -241,24 +289,29 @@ POST /api/approve/{approval_id}
 | C003 zero actions before approval | ✅ |
 | C003 five actions after approval | ✅ |
 | Duplicate protection | ✅ |
-| Local automated tests | ✅ 11/11 |
+| Human attention layer | ✅ |
+| Notification audit events | ✅ |
+| Demo escalation trigger | ✅ local demo |
+| Local automated tests | ✅ 15/15 |
 | Judge-facing Agent Activity UI | ✅ |
 
-## 12. Competition Demo Sequence
+## 13. Competition Demo Sequence
 
 Recommended four-minute flow:
 
 1. Introduce the contractor-readiness problem and SiteReady's goal.
-2. Show the Taskmaster UI and explain the controlled-autonomy boundary.
+2. Show the Taskmaster UI and briefly open the `i` explanation to explain controlled autonomy.
 3. Run C002 and show autonomous completion plus verification.
-4. Run C003 and show `NOT_READY / HIGH` plus the human-approval boundary.
-5. Show that no C003 actions exist before approval.
-6. Approve the exact approval ID and show five follow-up actions created.
-7. Briefly show duplicate protection.
-8. If the judging criteria require direct proof of Gemini/ADK execution, run `run_agent.py` and show the ADK agent responding to the C003 readiness prompt.
-9. Finish with the repository evidence and Google Cloud production deployment.
+4. Run C003 and show `NOT_READY / HIGH` plus the human-attention boundary.
+5. Show the notification log and the 30-second agent escalation countdown.
+6. Let the countdown reach zero and show `DEMO — ESCALATION TRIGGERED` without pressing an escalation button.
+7. Show the pending approval ID and the fact that no C003 actions exist before approval.
+8. Approve the exact approval ID and show five follow-up actions created and the human-attention item resolved.
+9. Briefly show duplicate protection.
+10. If the judging criteria require direct proof of Gemini/ADK execution, run `run_agent.py` and show the ADK agent responding to the C003 readiness prompt.
+11. Finish with the repository evidence and Google Cloud production deployment.
 
-## 13. Repository and Validation References
+## 14. Repository and Validation References
 
 Primary repository documentation:
 
@@ -268,6 +321,7 @@ Primary repository documentation:
 - `run_agent.py`
 - `app/agent.py`
 - `agent/tools/taskmaster_tools.py`
+- `agent/tools/notification_tools.py`
 - `web/main.py`
 - `tests/`
 - `web/`
