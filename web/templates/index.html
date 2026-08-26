@@ -9,19 +9,16 @@
 
 <body>
     <main class="container">
-
         <header>
             <div>
                 <h1>SiteReady AI</h1>
                 <p>Contractor Readiness Operations Console</p>
             </div>
-
             <span id="system-status" class="status">Checking...</span>
         </header>
 
         <section class="card">
             <label for="contractor-id">Contractor ID</label>
-
             <div class="input-row">
                 <input id="contractor-id" value="C003" placeholder="e.g. C003" autocomplete="off">
                 <button onclick="assessContractor()">Assess</button>
@@ -55,26 +52,30 @@
                 <button onclick="explainContractor()">Why?</button>
                 <button onclick="compareContractor()">What Changed?</button>
                 <button onclick="proposeActions()">Prepare Follow-ups</button>
-
                 <div class="taskmaster-action">
                     <button onclick="runTaskmaster()">Run Taskmaster</button>
-                    <span class="info-icon" title="Taskmaster is SiteReady's goal-driven agent. It reviews contractor evidence, determines what action is permitted, executes routine work autonomously, requires human approval for consequential work, and verifies the outcome." aria-label="What is Taskmaster?" role="img">&#9432;</span>
+                    <button type="button" class="info-icon" onclick="toggleTaskmasterInfo()" aria-label="What is Taskmaster?">i</button>
                 </div>
+            </div>
+
+            <div id="taskmaster-info" class="info-popover hidden" role="note">
+                <strong>Taskmaster Agent</strong>
+                <p>
+                    Reviews contractor evidence, compares historical state, explains findings,
+                    applies execution policy, acts when permitted, requests human approval for
+                    consequential work, and verifies the result.
+                </p>
             </div>
         </section>
 
         <section id="taskmaster-card" class="card hidden">
             <div class="taskmaster-header">
-                <div>
-                    <h2>Taskmaster Agent</h2>
-                    <p class="section-subtitle">SiteReady's goal-driven execution and governance agent</p>
-                </div>
+                <h2>Taskmaster Agent</h2>
+                <p class="section-subtitle">SiteReady's goal-driven execution and governance agent</p>
             </div>
-
             <p class="taskmaster-description">
                 Taskmaster takes the contractor-readiness goal, reviews the available evidence, determines what action is permitted, executes routine work autonomously, and stops for human approval when the work is consequential.
             </p>
-
             <div class="taskmaster-flow">
                 <span>ASSESS</span><span>&rarr;</span><span>COMPARE</span><span>&rarr;</span><span>EXPLAIN</span><span>&rarr;</span><span>DECIDE</span><span>&rarr;</span><span>ACT / APPROVE</span><span>&rarr;</span><span>VERIFY</span>
             </div>
@@ -102,14 +103,10 @@
             <div id="escalation-timer" class="approval-box hidden">
                 <strong>Demo escalation monitor</strong>
                 <span id="escalation-countdown">30s</span>
-                <small>If no human action is received, the demo escalation can be triggered.</small>
+                <small>If no human action is received, the agent will trigger the demo escalation automatically.</small>
             </div>
 
             <div id="notification-log"></div>
-
-            <div id="notification-actions" class="actions hidden">
-                <button type="button" onclick="triggerDemoEscalation()">Trigger Demo WhatsApp Escalation</button>
-            </div>
         </section>
 
         <section id="results" class="card hidden">
@@ -118,28 +115,20 @@
         </section>
 
         <section id="approval-card" class="card hidden">
-            <h2>Human Approval Required</h2>
+            <h2 id="approval-heading">Human Approval Required</h2>
             <p id="approval-message">Follow-up actions are awaiting human approval.</p>
-
             <div class="approval-box">
                 <strong>Approval ID</strong>
                 <code id="approval-id"></code>
                 <strong>Status</strong>
                 <span id="approval-status">Pending Human Approval</span>
             </div>
-
             <button id="approve-button" onclick="approveActions()">Approve Actions</button>
         </section>
 
         <footer class="technology-footer">
-            Powered by
-            <span>Google ADK</span>
-            <span>&middot;</span>
-            <span>Gemini 3.6 Flash</span>
-            <span>&middot;</span>
-            <span>Google Cloud</span>
+            Powered by <span>Google ADK</span> <span>&middot;</span> <span>Gemini 3.6 Flash</span> <span>&middot;</span> <span>Google Cloud</span>
         </footer>
-
     </main>
 
     <script src="/static/app.js"></script>
@@ -147,6 +136,7 @@
         let notificationApprovalId = null;
         let escalationInterval = null;
         let escalationSeconds = 30;
+        const STORAGE_KEY = "siteready.ui.state.v1";
 
         function escapeHtml(value) {
             return String(value ?? "")
@@ -155,6 +145,31 @@
                 .replaceAll(">", "&gt;")
                 .replaceAll('"', "&quot;")
                 .replaceAll("'", "&#039;");
+        }
+
+        function saveUiState(overrides = {}) {
+            const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+            const state = {
+                contractorId: contractorId(),
+                approvalId: notificationApprovalId,
+                ...existing,
+                ...overrides,
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+
+        function loadUiState() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+            } catch {
+                return {};
+            }
+        }
+
+        function toggleTaskmasterInfo() {
+            const popover = document.getElementById("taskmaster-info");
+            if (!popover) return;
+            popover.classList.toggle("hidden");
         }
 
         function notificationStatusLabel(event) {
@@ -167,6 +182,8 @@
 
         async function refreshNotificationLog(approvalId = notificationApprovalId) {
             if (!approvalId) return;
+            notificationApprovalId = approvalId;
+            saveUiState({ approvalId });
 
             try {
                 const response = await fetch(`/api/notifications?approval_id=${encodeURIComponent(approvalId)}`);
@@ -176,35 +193,22 @@
                 const events = data.items || data.events || [];
                 const card = document.getElementById("notification-card");
                 const log = document.getElementById("notification-log");
-                const actions = document.getElementById("notification-actions");
-
                 card.classList.remove("hidden");
 
                 if (!events.length) {
                     log.innerHTML = "<p>No notification events recorded yet.</p>";
-                    actions.classList.add("hidden");
                     return;
                 }
 
                 log.innerHTML = events.map(event => `
                     <div class="issue">
                         <strong>${escapeHtml(new Date(event.created_at).toLocaleTimeString())}</strong>
-                        <div>
-                            ${escapeHtml(String(event.channel || "").toUpperCase())}
-                            &nbsp;|&nbsp;
-                            <strong>${escapeHtml(notificationStatusLabel(event))}</strong>
-                        </div>
-                        <small>
-                            Recipient: ${escapeHtml((event.recipient_roles || []).join(", "))}
-                            &nbsp;|&nbsp; Notification: ${escapeHtml(event.notification_id)}
-                        </small>
+                        <div>${escapeHtml(String(event.channel || "").toUpperCase())} &nbsp;|&nbsp; <strong>${escapeHtml(notificationStatusLabel(event))}</strong></div>
+                        <small>Recipient: ${escapeHtml((event.recipient_roles || []).join(", "))} &nbsp;|&nbsp; Notification: ${escapeHtml(event.notification_id)}</small>
                         <div>${escapeHtml(event.message)}</div>
                         ${event.escalation_reason ? `<small>Reason: ${escapeHtml(event.escalation_reason)}</small>` : ""}
                     </div>
                 `).join("");
-
-                const whatsappTriggered = events.some(event => event.channel === "whatsapp" && event.status === "triggered");
-                actions.classList.toggle("hidden", whatsappTriggered);
             } catch (error) {
                 console.error("Notification log refresh failed:", error);
             }
@@ -212,6 +216,7 @@
 
         function startDemoEscalationTimer(approvalId) {
             notificationApprovalId = approvalId;
+            saveUiState({ approvalId });
             clearInterval(escalationInterval);
             escalationSeconds = 30;
 
@@ -233,7 +238,6 @@
 
         async function triggerDemoEscalation() {
             if (!notificationApprovalId) return;
-
             clearInterval(escalationInterval);
 
             try {
@@ -247,15 +251,13 @@
                 await refreshNotificationLog(notificationApprovalId);
                 document.getElementById("escalation-timer").classList.add("hidden");
             } catch (error) {
-                alert(error.message);
+                console.error("Escalation trigger failed:", error);
             }
         }
 
         async function refreshHumanAttention() {
             const id = contractorId();
-            const url = id
-                ? `/api/attention?contractor_id=${encodeURIComponent(id)}`
-                : "/api/attention";
+            const url = id ? `/api/attention?contractor_id=${encodeURIComponent(id)}` : "/api/attention";
 
             try {
                 const response = await fetch(url);
@@ -299,6 +301,7 @@
                 if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
 
                 notificationApprovalId = approvalId;
+                saveUiState({ approvalId });
                 showApproval(data);
                 await refreshNotificationLog(approvalId);
                 document.getElementById("approval-card").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -316,6 +319,7 @@
             const item = (attention.items || [])[0];
             if (item) {
                 notificationApprovalId = item.approval_id;
+                saveUiState({ approvalId: notificationApprovalId });
                 await refreshNotificationLog(notificationApprovalId);
                 startDemoEscalationTimer(notificationApprovalId);
             }
@@ -329,10 +333,27 @@
                 document.getElementById("escalation-timer").classList.add("hidden");
                 await refreshHumanAttention();
                 if (notificationApprovalId) await refreshNotificationLog(notificationApprovalId);
+                saveUiState({ approvalId: notificationApprovalId, approved: true });
             };
         }
 
-        refreshHumanAttention();
+        window.addEventListener("load", async () => {
+            const state = loadUiState();
+            if (state.contractorId) {
+                document.getElementById("contractor-id").value = state.contractorId;
+            }
+            if (state.approvalId) {
+                notificationApprovalId = state.approvalId;
+                await refreshNotificationLog(notificationApprovalId);
+                await refreshHumanAttention();
+            } else {
+                await refreshHumanAttention();
+            }
+        });
+
+        document.getElementById("contractor-id").addEventListener("input", () => {
+            saveUiState({ contractorId: contractorId() });
+        });
     </script>
 </body>
 </html>
