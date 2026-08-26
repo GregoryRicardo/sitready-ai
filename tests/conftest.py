@@ -52,11 +52,12 @@ def prepare_firestore_test_data():
 
 
 def _clear_taskmaster_state(db, contractor_ids: set[str]) -> None:
-    """Remove generated Taskmaster actions, approvals, and attention records."""
+    """Remove generated Taskmaster state for the supplied contractors."""
     for collection_name in (
         "followup_actions",
         "followup_approvals",
         "human_attention",
+        "notification_events",
     ):
         documents = db.collection(collection_name).stream()
 
@@ -66,7 +67,6 @@ def _clear_taskmaster_state(db, contractor_ids: set[str]) -> None:
                 document.reference.delete()
 
 
-@pytest.fixture
 def db():
     """Provide a Firestore client connected to the local emulator."""
     return get_firestore_client()
