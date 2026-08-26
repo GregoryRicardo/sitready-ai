@@ -31,7 +31,7 @@
                     <h2>Human Attention Required</h2>
                     <p class="section-subtitle">Practitioner work queue — items requiring human review</p>
                 </div>
-                <button type="button" onclick="refreshHumanAttention()">Refresh</button>
+                <button type="button" onclick="refreshCurrentState()">Refresh</button>
             </div>
             <div id="human-attention-list"></div>
         </section>
@@ -97,12 +97,12 @@
                     <h2>Notification &amp; Escalation Log</h2>
                     <p class="section-subtitle">Auditable human-notification state and escalation events</p>
                 </div>
-                <button type="button" onclick="refreshNotificationLog()">Refresh</button>
+                <button type="button" onclick="refreshCurrentState()">Refresh</button>
             </div>
 
             <div id="escalation-timer" class="approval-box hidden">
                 <strong>Demo escalation monitor</strong>
-                <span id="escalation-countdown">30s</span>
+                <span id="escalation-countdown">--</span>
                 <small>If no human action is received, the agent will trigger the demo escalation automatically.</small>
             </div>
 
@@ -134,9 +134,9 @@
     <script src="/static/app.js"></script>
     <script>
         let notificationApprovalId = null;
-        let escalationInterval = null;
-        let escalationSeconds = 30;
-        const STORAGE_KEY = "siteready.ui.state.v1";
+        let notificationMonitorInterval = null;
+        const STORAGE_KEY = "siteready.ui.state.v2";
+        const DEMO_ESCALATION_SECONDS = 30;
 
         function escapeHtml(value) {
             return String(value ?? "")
@@ -168,8 +168,7 @@
 
         function toggleTaskmasterInfo() {
             const popover = document.getElementById("taskmaster-info");
-            if (!popover) return;
-            popover.classList.toggle("hidden");
+            if (popover) popover.classList.toggle("hidden");
         }
 
         function notificationStatusLabel(event) {
@@ -180,13 +179,51 @@
             return String(event.status || "UNKNOWN").toUpperCase();
         }
 
+        function formatCountdown(seconds) {
+            if (seconds <= 0) return "0s";
+            return `${Math.ceil(seconds)}s`;
+        }
+
+        function updateEscalationTimer(events) {
+            const timer = document.getElementById("escalation-timer");
+            const countdown = document.getElementById("escalation-countdown");
+            if (!timer || !countdown) return;
+
+            const whatsapp = [...events]
+                .reverse()
+                .find(event => event.channel === "whatsapp");
+
+            if (!whatsapp || whatsapp.status === "triggered") {
+                timer.classList.add("hidden");
+                return;
+            }
+
+            if (whatsapp.status !== "scheduled") {
+                timer.classList.add("hidden");
+                return;
+            }
+
+            let dueAt = whatsapp.escalation_due_at;
+            if (!dueAt) {
+                const created = new Date(whatsapp.created_at).getTime();
+                dueAt = new Date(created + DEMO_ESCALATION_SECONDS * 1000).toISOString();
+            }
+
+            const remaining = (new Date(dueAt).getTime() - Date.now()) / 1000;
+            timer.classList.remove("hidden");
+            countdown.textContent = formatCountdown(Math.max(remaining, 0));
+        }
+
         async function refreshNotificationLog(approvalId = notificationApprovalId) {
-            if (!approvalId) return;
+            if (!approvalId) return [];
+
             notificationApprovalId = approvalId;
             saveUiState({ approvalId });
 
             try {
-                const response = await fetch(`/api/notifications?approval_id=${encodeURIComponent(approvalId)}`);
+                const response = await fetch(`/api/notifications?approval_id=${encodeURIComponent(approvalId)}`, {
+                    cache: "no-store",
+                });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
 
@@ -197,7 +234,8 @@
 
                 if (!events.length) {
                     log.innerHTML = "<p>No notification events recorded yet.</p>";
-                    return;
+                    updateEscalationTimer([]);
+                    return events;
                 }
 
                 log.innerHTML = events.map(event => `
@@ -209,50 +247,32 @@
                         ${event.escalation_reason ? `<small>Reason: ${escapeHtml(event.escalation_reason)}</small>` : ""}
                     </div>
                 `).join("");
+
+                updateEscalationTimer(events);
+                return events;
             } catch (error) {
                 console.error("Notification log refresh failed:", error);
+                return [];
             }
         }
 
-        function startDemoEscalationTimer(approvalId) {
+        async function startNotificationMonitor(approvalId) {
             notificationApprovalId = approvalId;
             saveUiState({ approvalId });
-            clearInterval(escalationInterval);
-            escalationSeconds = 30;
+            clearInterval(notificationMonitorInterval);
 
-            const timer = document.getElementById("escalation-timer");
-            const countdown = document.getElementById("escalation-countdown");
-            timer.classList.remove("hidden");
-            countdown.textContent = `${escalationSeconds}s`;
+            const poll = async () => {
+                const events = await refreshNotificationLog(approvalId);
+                const whatsapp = [...events].reverse().find(event => event.channel === "whatsapp");
 
-            escalationInterval = setInterval(async () => {
-                escalationSeconds -= 1;
-                countdown.textContent = `${Math.max(escalationSeconds, 0)}s`;
-
-                if (escalationSeconds <= 0) {
-                    clearInterval(escalationInterval);
-                    await triggerDemoEscalation();
+                if (whatsapp && whatsapp.status === "triggered") {
+                    clearInterval(notificationMonitorInterval);
+                    return;
                 }
-            }, 1000);
-        }
+            };
 
-        async function triggerDemoEscalation() {
-            if (!notificationApprovalId) return;
-            clearInterval(escalationInterval);
-
-            try {
-                const response = await fetch(`/api/notifications/${encodeURIComponent(notificationApprovalId)}/escalate`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" }
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
-
-                await refreshNotificationLog(notificationApprovalId);
-                document.getElementById("escalation-timer").classList.add("hidden");
-            } catch (error) {
-                console.error("Escalation trigger failed:", error);
-            }
+            await poll();
+            notificationMonitorInterval = setInterval(poll, 1000);
         }
 
         async function refreshHumanAttention() {
@@ -260,7 +280,7 @@
             const url = id ? `/api/attention?contractor_id=${encodeURIComponent(id)}` : "/api/attention";
 
             try {
-                const response = await fetch(url);
+                const response = await fetch(url, { cache: "no-store" });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
 
@@ -271,7 +291,7 @@
                 if (!items.length) {
                     card.classList.add("hidden");
                     list.innerHTML = "";
-                    return;
+                    return items;
                 }
 
                 card.classList.remove("hidden");
@@ -285,8 +305,22 @@
                         <button type="button" onclick="openHumanAttention('${escapeHtml(item.approval_id)}')">Review &amp; Approve</button>
                     </div>
                 `).join("");
+
+                return items;
             } catch (error) {
                 console.error("Human attention refresh failed:", error);
+                return [];
+            }
+        }
+
+        async function restoreReadiness(id) {
+            if (!id) return;
+            try {
+                const response = await fetch(`/api/assess/${encodeURIComponent(id)}`, { method: "POST" });
+                const data = await response.json();
+                if (response.ok) showReadiness(data);
+            } catch (error) {
+                console.error("Readiness restore failed:", error);
             }
         }
 
@@ -301,27 +335,32 @@
                 if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
 
                 notificationApprovalId = approvalId;
-                saveUiState({ approvalId });
                 showApproval(data);
-                await refreshNotificationLog(approvalId);
+                await startNotificationMonitor(approvalId);
                 document.getElementById("approval-card").scrollIntoView({ behavior: "smooth", block: "start" });
             } catch (error) {
                 alert(error.message);
             }
         }
 
+        async function refreshCurrentState() {
+            const id = contractorId();
+            saveUiState({ contractorId: id });
+            await restoreReadiness(id);
+            const items = await refreshHumanAttention();
+            const approvalId = notificationApprovalId || (items[0] && items[0].approval_id);
+            if (approvalId) {
+                await startNotificationMonitor(approvalId);
+            }
+        }
+
         const originalRunTaskmaster = window.runTaskmaster;
         window.runTaskmaster = async function () {
             await originalRunTaskmaster();
-            await refreshHumanAttention();
-
-            const attention = await fetch(`/api/attention?contractor_id=${encodeURIComponent(contractorId())}`).then(r => r.json());
-            const item = (attention.items || [])[0];
+            const items = await refreshHumanAttention();
+            const item = items[0];
             if (item) {
-                notificationApprovalId = item.approval_id;
-                saveUiState({ approvalId: notificationApprovalId });
-                await refreshNotificationLog(notificationApprovalId);
-                startDemoEscalationTimer(notificationApprovalId);
+                await startNotificationMonitor(item.approval_id);
             }
         };
 
@@ -329,30 +368,30 @@
         if (originalApproveActions) {
             window.approveActions = async function () {
                 await originalApproveActions();
-                clearInterval(escalationInterval);
+                clearInterval(notificationMonitorInterval);
                 document.getElementById("escalation-timer").classList.add("hidden");
-                await refreshHumanAttention();
-                if (notificationApprovalId) await refreshNotificationLog(notificationApprovalId);
-                saveUiState({ approvalId: notificationApprovalId, approved: true });
+                await refreshCurrentState();
             };
         }
+
+        document.getElementById("contractor-id").addEventListener("input", () => {
+            saveUiState({ contractorId: contractorId() });
+        });
 
         window.addEventListener("load", async () => {
             const state = loadUiState();
             if (state.contractorId) {
                 document.getElementById("contractor-id").value = state.contractorId;
             }
-            if (state.approvalId) {
-                notificationApprovalId = state.approvalId;
-                await refreshNotificationLog(notificationApprovalId);
-                await refreshHumanAttention();
-            } else {
-                await refreshHumanAttention();
-            }
-        });
 
-        document.getElementById("contractor-id").addEventListener("input", () => {
-            saveUiState({ contractorId: contractorId() });
+            const id = contractorId();
+            if (id) await restoreReadiness(id);
+
+            const items = await refreshHumanAttention();
+            const approvalId = state.approvalId || notificationApprovalId || (items[0] && items[0].approval_id);
+            if (approvalId) {
+                await startNotificationMonitor(approvalId);
+            }
         });
     </script>
 </body>
