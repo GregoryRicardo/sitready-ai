@@ -11,7 +11,9 @@ SiteReady AI turns contractor-readiness evidence into a controlled, action-orien
 **Gemini model:** `gemini-3.6-flash`  
 **Google Cloud:** Cloud Run + Cloud Firestore
 
-The production agent is configured with Google ADK's `Agent` and `Gemini(model="gemini-3.6-flash")`.
+The repository contains a Google ADK `Agent` configured with `Gemini(model="gemini-3.6-flash")`. The direct ADK/Gemini runner is `run_agent.py`.
+
+The production web console invokes the authoritative deterministic Taskmaster workflow directly from FastAPI. This separation is intentional: Gemini provides the model reasoning layer in the ADK agent path, while SiteReady tools and Taskmaster policy control evidence, execution boundaries, persistence, approval, escalation and verification.
 
 ## What SiteReady does
 
@@ -40,6 +42,24 @@ Execution policy
                            action creation
                                    ↓
                               verification
+```
+
+For consequential work, the human-governance layer also provides:
+
+```text
+Human attention
+    ↓
+Notification audit event
+    ↓
+30-second demo escalation schedule
+    ↓
+DEMO — ESCALATION TRIGGERED
+    ↓
+Human approval
+    ↓
+Action creation
+    ↓
+Verification
 ```
 
 The system is designed around **controlled autonomy** rather than unrestricted automation.
@@ -74,29 +94,37 @@ After explicit approval through the production approval endpoint, five C003 foll
 
 ## Architecture
 
+### Direct ADK/Gemini path
+
 ```text
-                         ┌──────────────────────┐
-                         │      User / UI       │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │       Cloud Run      │
-                         │     FastAPI app      │
-                         └──────────┬───────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    ▼                               ▼
-          ┌──────────────────┐            ┌──────────────────┐
-          │   Google ADK     │            │    Firestore     │
-          │ SiteReady Agent  │◄──────────►│ readiness data   │
-          └────────┬─────────┘            │ actions/approvals│
-                   │                      └──────────────────┘
-                   ▼
-          ┌──────────────────┐
-          │ Gemini 3.6 Flash │
-          └──────────────────┘
+User prompt
+    ↓
+Google ADK Agent
+    ↓
+Gemini 3.6 Flash
+    ↓
+SiteReady tools
+    ↓
+Taskmaster workflow
 ```
+
+### Production web path
+
+```text
+User / UI
+    ↓
+Cloud Run
+    ↓
+FastAPI
+    ↓
+Taskmaster workflow
+    ↓
+SiteReady tools
+    ↓
+Firestore
+```
+
+The production web path is deterministic and authoritative. The ADK/Gemini path is provided separately through `run_agent.py` for direct model-driven agent execution and evidence.
 
 ## Firestore data model
 
@@ -111,7 +139,7 @@ Production validation covered these datasets:
 | `corrective_actions` | 2 |
 | `readiness_rules` | 9 |
 
-Runtime workflow state is persisted in collections including `followup_approvals` and `followup_actions`.
+Runtime workflow state is persisted in collections including `followup_approvals`, `followup_actions`, `human_attention`, and `notification_events`.
 
 ## Key agent capabilities
 
@@ -123,6 +151,8 @@ Runtime workflow state is persisted in collections including `followup_approvals
 - Follow-up action proposals
 - Human approval for consequential work
 - Autonomous execution for permitted routine work
+- Human-attention notification audit trail
+- Demo escalation workflow
 - Duplicate protection for pending approvals and open actions
 - Execution verification
 
@@ -147,7 +177,10 @@ POST /api/compare/{contractor_id}
 POST /api/propose/{contractor_id}
 POST /api/taskmaster/{contractor_id}
 POST /api/approve/{approval_id}
+GET  /api/notifications?approval_id={approval_id}
 ```
+
+The notification API exposes auditable demo notification events. The current email and WhatsApp channels are simulation/audit events; they are not claims of external delivery.
 
 ## Local development
 
@@ -165,7 +198,7 @@ The deployed Cloud Run service uses:
 
 ```text
 SITEREADY_ENV=cloud
-GOOGLE_CLOUD_PROJECT=siteready-ai-506306
+GOOGLE_CLOUD_PROJECT=sitready-ai-506306
 ```
 
 For local Google Cloud access, authenticate with your Google account and configure the project:
@@ -193,12 +226,15 @@ During production troubleshooting, a temporary Firestore REST-based seeding path
 
 For a concise Taskmaster demonstration:
 
-1. Run the Taskmaster workflow for `C002` and show autonomous completion.
-2. Run the Taskmaster workflow for `C003` and show `awaiting_human_approval`.
-3. Show the pending approval ID and confirm no C003 actions exist before approval.
-4. Approve the exact approval ID through `/api/approve/{approval_id}`.
-5. Show the five C003 actions created in Firestore.
-6. Highlight the duplicate-protection behavior by repeating the C003 workflow request.
+1. Run the Taskmaster workflow for `C002` and show autonomous completion plus verification.
+2. Run the Taskmaster workflow for `C003` and show `awaiting_human_approval` and the human-attention boundary.
+3. Show the notification audit log and the 30-second demo escalation countdown.
+4. Let the countdown reach zero and show `DEMO — ESCALATION TRIGGERED` without pressing an escalation button.
+5. Show the pending approval ID and confirm no C003 actions exist before approval.
+6. Approve the exact approval ID through `/api/approve/{approval_id}`.
+7. Show the five C003 actions created and human attention resolved.
+8. Briefly demonstrate duplicate protection by repeating the C003 workflow request.
+9. If the judging criteria require direct proof of Gemini/ADK execution, run `run_agent.py` and show the ADK agent responding to the C003 readiness prompt.
 
 This demonstrates the core product principle: **the agent acts autonomously where policy permits and stops for human control where the work is consequential.**
 
@@ -208,6 +244,12 @@ Detailed production validation notes are maintained in:
 
 `docs/HACKATHON_VALIDATION.md`
 
+Current local regression checkpoint:
+
+```text
+15 passed
+```
+
 ## Repository structure
 
 ```text
@@ -216,7 +258,7 @@ agent/                Agent tools, workflow, Firestore client and Taskmaster log
 data/                 Synthetic readiness datasets
 scripts/              Data seeding utilities
 web/                  FastAPI web application and UI
-run_agent.py          Local ADK runner
+run_agent.py          Direct Google ADK/Gemini runner
 Procfile              Cloud Run / Uvicorn process definition
 ```
 
