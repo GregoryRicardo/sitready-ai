@@ -13,7 +13,9 @@ This document records the end-to-end validation completed for the All Things Age
 - **Live Cloud Run service:** `sitready-ai`
 - **Region:** `africa-south1`
 
-The live agent configuration uses Google ADK's `Agent` with `Gemini(model="gemini-3.6-flash")`.
+The repository contains a Google ADK `Agent` with `Gemini(model="gemini-3.6-flash")`. The direct ADK/Gemini execution path is provided by `run_agent.py`.
+
+The production web console invokes the authoritative deterministic Taskmaster workflow directly from FastAPI. This is intentional: Gemini provides model reasoning in the ADK agent path, while SiteReady tools and Taskmaster policy control deterministic evidence access, execution, persistence, approval, escalation and verification.
 
 ## Production data validation
 
@@ -52,11 +54,35 @@ Live endpoint returned:
 - `risk_level`: `HIGH`
 - `approval_required`: `True`
 
-Five critical readiness issues were identified. A pending approval was created and duplicate protection was verified: re-running the workflow returned the existing pending approval instead of creating another one.
+Five readiness issues were identified. A pending approval was created and duplicate protection was verified: re-running the workflow returned the existing pending approval instead of creating another one.
 
 Before approval, Firestore verification showed no C003 follow-up actions.
 
 After explicit human approval through `/api/approve/{approval_id}`, five C003 follow-up actions were created and verified as `open`.
+
+## Notification and escalation demo validation
+
+A fresh local C003 workflow was validated using the Firestore emulator.
+
+The flow was:
+
+```text
+Human attention required
+        ↓
+EMAIL | SIMULATED
+        ↓
+WHATSAPP | DEMO — SCHEDULED
+        ↓
+30-second demo countdown
+        ↓
+WHATSAPP | DEMO — ESCALATION TRIGGERED
+```
+
+The escalation event was triggered without a practitioner pressing an escalation button. The audit record includes notification ID, recipient roles, approval ID, timestamp, escalation reason and triggered status.
+
+Important: these email/WhatsApp events are **demo simulation / audit events**, not evidence of external message delivery. The implementation explicitly records that no external WhatsApp message was sent.
+
+The application reconciles due demo escalations using the persisted `escalation_due_at` timestamp when the notification log is read/polled. This is suitable for the competition demonstration but is not a Cloud Scheduler or Cloud Tasks background worker.
 
 ## Approval API
 
@@ -76,9 +102,23 @@ The validated behavior demonstrates the intended Taskmaster control boundary:
 4. Determine execution policy.
 5. Execute routine C002 work autonomously.
 6. Stop C003 consequential work at a human-approval gate.
-7. Execute C003 work only after explicit approval.
-8. Verify persisted action records.
-9. Prevent duplicate pending approvals and duplicate open actions.
+7. Create a human-attention item and audit notification events.
+8. Demonstrate automatic escalation at the configured demo threshold.
+9. Execute C003 work only after explicit approval.
+10. Verify persisted action records.
+11. Prevent duplicate pending approvals and duplicate open actions.
+
+## Automated regression validation
+
+The local suite uses the Firestore emulator with a shared pytest fixture. The fixture requires local mode, seeds deterministic baseline data, and clears generated actions, approvals, human-attention records and notification events between isolated tests.
+
+Current regression checkpoint:
+
+```text
+15 passed
+```
+
+Notification-specific tests cover creation/scheduling, due-escalation reconciliation without a manual trigger, and prevention of escalation after human attention is resolved.
 
 ## Firestore diagnostic cleanup
 
