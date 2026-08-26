@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from threading import Timer
 from typing import Any
 
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -16,16 +15,13 @@ STATUS_SENT = "sent"
 STATUS_SCHEDULED = "scheduled"
 
 
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
 
 
 def _notification_id(channel: str, approval_id: str) -> str:
     prefix = "EMAIL" if channel == CHANNEL_EMAIL else "WA"
     return f"NOT-{prefix}-{approval_id}"
-
 
 
 def create_notification_event(
@@ -71,7 +67,6 @@ def create_notification_event(
     return {"created": True, "duplicate": False, **record}
 
 
-
 def create_human_notification_events(attention: dict[str, Any]) -> list[dict[str, Any]]:
     """Record the initial email notification and scheduled demo escalation."""
     approval_id = str(attention.get("approval_id", "")).strip()
@@ -110,25 +105,8 @@ def create_human_notification_events(attention: dict[str, Any]) -> list[dict[str
     return [email, escalation]
 
 
-
-def list_notification_events(approval_id: str | None = None) -> list[dict[str, Any]]:
-    """Return notification events for the audit timeline."""
-    db = get_firestore_client()
-    query = db.collection("notification_events")
-
-    if approval_id:
-        query = query.where(
-            filter=FieldFilter("approval_id", "==", approval_id.strip())
-        )
-
-    events = [document.to_dict() or {} for document in query.stream()]
-    events.sort(key=lambda item: item.get("created_at", ""))
-    return events
-
-
-
 def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
-    """Update the scheduled WhatsApp demo event to triggered; no external message is sent."""
+    """Transition the scheduled demo escalation to triggered; no external message is sent."""
     approval_id = approval_id.strip()
     if not approval_id:
         raise ValueError("approval_id is required.")
@@ -160,11 +138,7 @@ def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
     if snapshot.exists:
         existing = snapshot.to_dict() or {}
         if existing.get("status") == STATUS_TRIGGERED:
-            return {
-                "triggered": False,
-                "duplicate": True,
-                **existing,
-            }
+            return {"triggered": False, "duplicate": True, **existing}
 
         updated = {
             **existing,
@@ -177,11 +151,7 @@ def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
             "triggered_at": triggered_at,
         }
         reference.set(updated)
-        return {
-            "triggered": True,
-            "duplicate": False,
-            **updated,
-        }
+        return {"triggered": True, "duplicate": False, **updated}
 
     record = create_notification_event(
         channel=CHANNEL_WHATSAPP,
@@ -200,12 +170,58 @@ def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
     return {"triggered": True, **record}
 
 
+def _auto_trigger_due_escalation(approval_id: str, event: dict[str, Any]) -> dict[str, Any]:
+    """Transition a due scheduled escalation on the server side."""
+    if event.get("status") != STATUS_SCHEDULED:
+        return event
+
+    due_at = event.get("escalation_due_at")
+    if not due_at:
+        return event
+
+    try:
+        due_time = datetime.fromisoformat(due_at)
+    except (TypeError, ValueError):
+        return event
+
+    if due_time > datetime.now(timezone.utc):
+        return event
+
+    result = trigger_demo_whatsapp_escalation(approval_id)
+    if result.get("triggered"):
+        return result
+    return {**event, "status": result.get("status", event.get("status"))}
+
+
+def list_notification_events(approval_id: str | None = None) -> list[dict[str, Any]]:
+    """Return notification events and server-side trigger any due demo escalation."""
+    db = get_firestore_client()
+    query = db.collection("notification_events")
+
+    if approval_id:
+        query = query.where(
+            filter=FieldFilter("approval_id", "==", approval_id.strip())
+        )
+
+    events = [document.to_dict() or {} for document in query.stream()]
+
+    if approval_id:
+        events = [
+            _auto_trigger_due_escalation(approval_id.strip(), event)
+            if event.get("channel") == CHANNEL_WHATSAPP
+            else event
+            for event in events
+        ]
+
+    events.sort(key=lambda item: item.get("created_at", ""))
+    return events
+
 
 def schedule_demo_whatsapp_escalation(
     approval_id: str,
     delay_seconds: int = 30,
 ) -> dict[str, Any]:
-    """Schedule the agent-driven demo escalation and persist its due time."""
+    """Persist the agent-driven escalation due time for deterministic monitoring."""
     approval_id = approval_id.strip()
     if not approval_id:
         raise ValueError("approval_id is required.")
@@ -216,67 +232,33 @@ def schedule_demo_whatsapp_escalation(
     reference = db.collection("notification_events").document(notification_id)
     snapshot = reference.get()
 
-    now = datetime.now(timezone.utc)
-    scheduled_at = now.isoformat()
-    due_at = (now + timedelta(seconds=safe_delay)).isoformat()
-
-    if snapshot.exists:
-        existing = snapshot.to_dict() or {}
-
-        if existing.get("status") == STATUS_TRIGGERED:
-            return {
-                "scheduled": False,
-                "already_triggered": True,
-                "approval_id": approval_id,
-                "delay_seconds": safe_delay,
-                "mode": "demo_simulation",
-                "escalation_due_at": existing.get("escalation_due_at"),
-            }
-
-        if existing.get("status") == STATUS_SCHEDULED and existing.get("escalation_due_at"):
-            due_value = existing["escalation_due_at"]
-            try:
-                due_dt = datetime.fromisoformat(due_value)
-            except ValueError:
-                due_dt = now
-
-            remaining = max(1, int((due_dt - now).total_seconds()))
-            timer = Timer(
-                remaining,
-                trigger_demo_whatsapp_escalation,
-                args=(approval_id,),
-            )
-            timer.daemon = True
-            timer.start()
-
-            return {
-                "scheduled": True,
-                "already_scheduled": True,
-                "approval_id": approval_id,
-                "delay_seconds": remaining,
-                "mode": "demo_simulation",
-                "escalation_due_at": due_value,
-            }
-
-        updated = {
-            **existing,
-            "status": STATUS_SCHEDULED,
-            "scheduled_at": scheduled_at,
-            "escalation_due_at": due_at,
-        }
-        reference.set(updated)
-    else:
+    if not snapshot.exists:
         raise LookupError(
             f"Notification event '{notification_id}' does not exist; create the human notification first."
         )
 
-    timer = Timer(
-        safe_delay,
-        trigger_demo_whatsapp_escalation,
-        args=(approval_id,),
-    )
-    timer.daemon = True
-    timer.start()
+    existing = snapshot.to_dict() or {}
+
+    if existing.get("status") == STATUS_TRIGGERED:
+        return {
+            "scheduled": False,
+            "already_triggered": True,
+            "approval_id": approval_id,
+            "delay_seconds": 0,
+            "mode": "demo_simulation",
+            "escalation_due_at": existing.get("escalation_due_at"),
+        }
+
+    now = datetime.now(timezone.utc)
+    due_at = (now + timedelta(seconds=safe_delay)).isoformat()
+
+    updated = {
+        **existing,
+        "status": STATUS_SCHEDULED,
+        "scheduled_at": now.isoformat(),
+        "escalation_due_at": due_at,
+    }
+    reference.set(updated)
 
     return {
         "scheduled": True,
@@ -284,6 +266,6 @@ def schedule_demo_whatsapp_escalation(
         "approval_id": approval_id,
         "delay_seconds": safe_delay,
         "mode": "demo_simulation",
-        "scheduled_at": scheduled_at,
+        "scheduled_at": now.isoformat(),
         "escalation_due_at": due_at,
     }
