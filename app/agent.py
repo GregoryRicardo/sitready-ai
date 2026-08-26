@@ -1,3 +1,4 @@
+import google.auth
 from google.adk.agents import Agent
 from google.adk.models import Gemini
 
@@ -23,6 +24,9 @@ from agent.tools.taskmaster_tools import (
 
 MODEL = "gemini-3.6-flash"
 
+CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+VERTEX_CREDENTIALS, _ = google.auth.default(scopes=[CLOUD_PLATFORM_SCOPE])
+
 
 def lookup_contractor(contractor_id: str) -> dict:
     """
@@ -36,7 +40,15 @@ def lookup_contractor(contractor_id: str) -> dict:
 
 root_agent = Agent(
     name="siteready_agent",
-    model=Gemini(model=MODEL),
+    model=Gemini(
+        model=MODEL,
+        client_kwargs={
+            "vertexai": True,
+            "project": "siteready-ai-506306",
+            "location": "global",
+            "credentials": VERTEX_CREDENTIALS,
+        },
+    ),
     instruction="""
 You are SiteReady AI, an autonomous contractor-readiness assistant.
 
