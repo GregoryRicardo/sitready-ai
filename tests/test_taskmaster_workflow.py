@@ -1,25 +1,11 @@
-import os
-
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from agent.firestore_client import get_firestore_client
-from agent.tools.taskmaster_tools import (
-    run_taskmaster_workflow,
-)
+from agent.tools.taskmaster_tools import run_taskmaster_workflow
 
 
 AUTONOMOUS_CONTRACTOR_ID = "C002"
 APPROVAL_CONTRACTOR_ID = "C003"
-
-
-def require_firestore_emulator() -> None:
-    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST")
-
-    if emulator_host != "127.0.0.1:8080":
-        raise RuntimeError(
-            "Phase 13.3.1 must run against the local Firestore emulator "
-            "at 127.0.0.1:8080."
-        )
 
 
 def clear_contractors_test_actions(
@@ -77,9 +63,7 @@ def get_contractor_actions(
     """
     return [
         document.to_dict()
-        for document in db.collection(
-            "followup_actions"
-        )
+        for document in db.collection("followup_actions")
         .where(
             filter=FieldFilter(
                 "contractor_id",
@@ -100,9 +84,7 @@ def get_contractor_approvals(
     """
     return [
         document.to_dict()
-        for document in db.collection(
-            "followup_approvals"
-        )
+        for document in db.collection("followup_approvals")
         .where(
             filter=FieldFilter(
                 "contractor_id",
@@ -114,7 +96,7 @@ def get_contractor_approvals(
     ]
 
 
-def test_autonomous_execution_path(db) -> None:
+def test_autonomous_execution_path(clean_taskmaster_state) -> None:
     """
     C002 is the controlled autonomous-execution scenario.
 
@@ -125,6 +107,8 @@ def test_autonomous_execution_path(db) -> None:
     - actions are verified
     - second execution creates no duplicates
     """
+    db = clean_taskmaster_state
+
     first_run = run_taskmaster_workflow(
         AUTONOMOUS_CONTRACTOR_ID
     )
@@ -181,10 +165,6 @@ def test_autonomous_execution_path(db) -> None:
             == "taskmaster_autonomous_workflow"
         )
 
-    # ---------------------------------------------------------
-    # SECOND EXECUTION — IDEMPOTENCY
-    # ---------------------------------------------------------
-
     second_run = run_taskmaster_workflow(
         AUTONOMOUS_CONTRACTOR_ID
     )
@@ -222,7 +202,7 @@ def test_autonomous_execution_path(db) -> None:
     assert len(actions_after_second_run) == 2
 
 
-def test_human_approval_path(db) -> None:
+def test_human_approval_path(clean_taskmaster_state) -> None:
     """
     C003 is the consequential-action scenario.
 
@@ -231,6 +211,8 @@ def test_human_approval_path(db) -> None:
     - approval is pending
     - no follow-up actions are created
     """
+    db = clean_taskmaster_state
+
     result = run_taskmaster_workflow(
         APPROVAL_CONTRACTOR_ID
     )
@@ -268,10 +250,16 @@ def test_human_approval_path(db) -> None:
     assert approvals[0]["status"] == "pending"
 
 
-def test_phase13_3_taskmaster_workflow() -> None:
-    require_firestore_emulator()
+def test_phase13_3_taskmaster_workflow(
+    clean_taskmaster_state,
+) -> None:
+    """
+    End-to-end Taskmaster regression test.
 
-    db = get_firestore_client()
+    This test intentionally runs both controlled paths in one
+    isolated local-emulator state.
+    """
+    db = clean_taskmaster_state
 
     contractor_ids = {
         AUTONOMOUS_CONTRACTOR_ID,
@@ -288,10 +276,28 @@ def test_phase13_3_taskmaster_workflow() -> None:
         contractor_ids,
     )
 
-    test_autonomous_execution_path(db)
+    # Autonomous path
+    first_run = run_taskmaster_workflow(
+        AUTONOMOUS_CONTRACTOR_ID
+    )
 
-    # Clear C003 approval records created by the autonomous-path
-    # test boundary before testing the approval branch.
+    assert first_run["workflow_status"] == "completed"
+    assert first_run["execution_mode"] == "autonomous"
+    assert first_run["approval_required"] is False
+
+    assert len(first_run["execution"]["actions"]) == 2
+
+    created_actions = [
+        action
+        for action in first_run["execution"]["actions"]
+        if action.get("created") is True
+    ]
+
+    assert len(created_actions) == 2
+
+    assert first_run["verification"]["verified"] is True
+
+    # Human-approval path
     clear_test_approvals(
         db,
         {APPROVAL_CONTRACTOR_ID},
@@ -302,11 +308,54 @@ def test_phase13_3_taskmaster_workflow() -> None:
         {APPROVAL_CONTRACTOR_ID},
     )
 
-    test_human_approval_path(db)
+    approval_run = run_taskmaster_workflow(
+        APPROVAL_CONTRACTOR_ID
+    )
+
+    assert (
+        approval_run["workflow_status"]
+        == "awaiting_human_approval"
+    )
+
+    assert (
+        approval_run["execution_mode"]
+        == "human_approval"
+    )
+
+    assert approval_run["approval_required"] is True
+
+    assert approval_run["approval"]["approval_id"]
+    assert approval_run["approval"]["status"] == "pending"
+
+    c003_actions = get_contractor_actions(
+        db,
+        APPROVAL_CONTRACTOR_ID,
+    )
+
+    assert len(c003_actions) == 0
 
 
 if __name__ == "__main__":
-    test_phase13_3_taskmaster_workflow()
+    db = get_firestore_client()
+
+    test_contractor_ids = {
+        AUTONOMOUS_CONTRACTOR_ID,
+        APPROVAL_CONTRACTOR_ID,
+    }
+
+    clear_contractors_test_actions(
+        db,
+        test_contractor_ids,
+    )
+
+    clear_test_approvals(
+        db,
+        test_contractor_ids,
+    )
+
+    test_phase13_3_taskmaster_workflow(
+        db
+    )
 
     print()
     print("==========================================")
@@ -314,9 +363,6 @@ if __name__ == "__main__":
     print("==========================================")
     print("Autonomous contractor: C002")
     print("Autonomous execution: verified")
-    print("Autonomous idempotency: verified")
-    print("Actions created: 2")
-    print("Duplicate actions prevented: 2")
     print("Approval contractor: C003")
     print("Human approval required: verified")
     print("Actions created before approval: 0")

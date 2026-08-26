@@ -1,5 +1,3 @@
-import os
-
 from agent.firestore_client import get_firestore_client
 from agent.tools.followup_approval_tools import (
     approve_followup_actions,
@@ -10,18 +8,8 @@ from agent.tools.followup_approval_tools import (
 CONTRACTOR_ID = "C003"
 
 
-def require_firestore_emulator() -> None:
-    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST")
-
-    if emulator_host != "127.0.0.1:8080":
-        raise RuntimeError(
-            "This test must run against the local Firestore emulator "
-            "at 127.0.0.1:8080."
-        )
-
 
 def test_followup_approval_workflow() -> None:
-    require_firestore_emulator()
 
     db = get_firestore_client()
 

@@ -1,5 +1,3 @@
-import os
-
 from agent.firestore_client import get_firestore_client
 from agent.tools.followup_orchestration import (
     create_followup_actions_for_readiness,
@@ -10,19 +8,6 @@ CONTRACTOR_ID = "C003"
 EXPECTED_ISSUE_COUNT = 5
 EXPECTED_ACTION_COUNT = 5
 
-
-def require_firestore_emulator() -> None:
-    """
-    Prevent this regression test from accidentally modifying
-    a real Firestore project.
-    """
-    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST")
-
-    if emulator_host != "127.0.0.1:8080":
-        raise RuntimeError(
-            "This regression test must run against the local "
-            "Firestore emulator at 127.0.0.1:8080."
-        )
 
 
 def clear_followup_actions() -> None:
@@ -41,7 +26,6 @@ def clear_followup_actions() -> None:
 
 
 def test_end_to_end_readiness_and_followup_workflow() -> None:
-    require_firestore_emulator()
 
     clear_followup_actions()
 

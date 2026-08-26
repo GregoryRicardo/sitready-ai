@@ -1,14 +1,9 @@
-import os
-
-from agent.evaluation import evaluate_readiness
+﻿from agent.evaluation import evaluate_readiness
 from agent.tools.contractor_tools import get_contractor
 from agent.tools.corrective_action_tools import get_corrective_actions
 from agent.tools.document_tools import get_documents
 from agent.tools.inspection_tools import get_inspections
 from agent.tools.training_tools import get_training_records
-
-
-os.environ["FIRESTORE_EMULATOR_HOST"] = "127.0.0.1:8080"
 
 
 def assess(contractor_id: str) -> None:
@@ -41,6 +36,10 @@ def assess(contractor_id: str) -> None:
 
 
 if __name__ == "__main__":
+    import os
+
+    os.environ["FIRESTORE_EMULATOR_HOST"] = "[::1]:8983"
+
     assess("C001")
     assess("C002")
     assess("C003")

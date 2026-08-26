@@ -1,5 +1,3 @@
-import os
-
 from agent.firestore_client import get_firestore_client
 from agent.tools.audited_readiness_tools import (
     assess_contractor_readiness_with_audit,
@@ -12,18 +10,8 @@ from agent.tools.change_detection_tools import (
 CONTRACTOR_ID = "C003"
 
 
-def require_firestore_emulator() -> None:
-    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST")
-
-    if emulator_host != "127.0.0.1:8080":
-        raise RuntimeError(
-            "This test must run against the local Firestore emulator "
-            "at 127.0.0.1:8080."
-        )
-
 
 def test_change_detection_with_resolved_issue() -> None:
-    require_firestore_emulator()
 
     db = get_firestore_client()
 

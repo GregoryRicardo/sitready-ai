@@ -1,5 +1,3 @@
-import os
-
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from agent.firestore_client import get_firestore_client
@@ -21,15 +19,6 @@ from agent.tools.readiness_tools import assess_contractor_readiness
 
 CONTRACTOR_ID = "C003"
 
-
-def require_firestore_emulator() -> None:
-    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST")
-
-    if emulator_host != "127.0.0.1:8080":
-        raise RuntimeError(
-            "Phase 12 must run against the local Firestore emulator "
-            "at 127.0.0.1:8080."
-        )
 
 
 def clear_test_write_collections(db) -> None:
@@ -68,7 +57,6 @@ def clear_test_readiness_history(
 
 
 def test_phase12_end_to_end() -> None:
-    require_firestore_emulator()
 
     db = get_firestore_client()
 

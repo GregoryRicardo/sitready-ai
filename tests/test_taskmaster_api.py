@@ -1,8 +1,5 @@
-import os
-
 from fastapi.testclient import TestClient
 
-from agent.firestore_client import get_firestore_client
 from web.main import app
 
 
@@ -13,17 +10,17 @@ APPROVAL_CONTRACTOR_ID = "C003"
 client = TestClient(app)
 
 
-def require_firestore_emulator() -> None:
-    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST")
+def test_c002_taskmaster_api(clean_taskmaster_state) -> None:
+    """
+    C002 must execute autonomously.
 
-    if emulator_host != "127.0.0.1:8080":
-        raise RuntimeError(
-            "This test must run against the local Firestore emulator "
-            "at 127.0.0.1:8080."
-        )
-
-
-def test_c002_taskmaster_api() -> None:
+    Expected:
+    - HTTP 200
+    - workflow completes
+    - execution mode is autonomous
+    - approval is not required
+    - verification succeeds
+    """
     response = client.post(
         f"/api/taskmaster/{AUTONOMOUS_CONTRACTOR_ID}"
     )
@@ -41,11 +38,22 @@ def test_c002_taskmaster_api() -> None:
     assert data["approval_required"] is False
 
     assert data["verification"]["verified"] is True
-
     assert data["workflow_steps"]
 
 
-def test_c003_taskmaster_api() -> None:
+def test_c003_taskmaster_api(clean_taskmaster_state) -> None:
+    """
+    C003 must stop at the human-approval boundary.
+
+    Expected:
+    - HTTP 200
+    - workflow awaits human approval
+    - approval is required
+    - approval record is pending
+    - no follow-up actions exist before approval
+    """
+    db = clean_taskmaster_state
+
     response = client.post(
         f"/api/taskmaster/{APPROVAL_CONTRACTOR_ID}"
     )
@@ -75,10 +83,9 @@ def test_c003_taskmaster_api() -> None:
     assert data["approval"]["approval_id"]
     assert data["approval"]["status"] == "pending"
 
-    # The approval boundary must remain intact.
-    # The Taskmaster proposal must not create actions.
-    db = get_firestore_client()
-
+    # Approval boundary:
+    # Taskmaster must propose actions but must not create them
+    # before human approval.
     actions = [
         document.to_dict()
         for document in db.collection(
@@ -92,6 +99,9 @@ def test_c003_taskmaster_api() -> None:
 
 
 def test_taskmaster_api_health_contract() -> None:
+    """
+    Verify the public health contract.
+    """
     response = client.get("/health")
 
     assert response.status_code == 200
@@ -100,21 +110,3 @@ def test_taskmaster_api_health_contract() -> None:
 
     assert data["status"] == "ok"
     assert data["service"] == "siteready-ai"
-
-
-if __name__ == "__main__":
-    require_firestore_emulator()
-
-    test_c002_taskmaster_api()
-    test_c003_taskmaster_api()
-    test_taskmaster_api_health_contract()
-
-    print()
-    print("==========================================")
-    print("TASKMASTER API REGRESSION TEST PASSED")
-    print("==========================================")
-    print("C002 API workflow: autonomous ✅")
-    print("C003 API workflow: approval required ✅")
-    print("C003 actions before approval: 0 ✅")
-    print("Health endpoint: verified ✅")
-    print("==========================================")

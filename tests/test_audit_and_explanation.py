@@ -1,5 +1,3 @@
-import os
-
 from agent.firestore_client import get_firestore_client
 from agent.tools.audited_readiness_tools import (
     assess_contractor_readiness_with_audit,
@@ -12,22 +10,8 @@ CONTRACTOR_ID = "C003"
 EXPECTED_ISSUE_COUNT = 5
 
 
-def require_firestore_emulator() -> None:
-    """
-    Prevent this test from accidentally running against
-    real Google Cloud Firestore.
-    """
-    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST")
-
-    if emulator_host != "127.0.0.1:8080":
-        raise RuntimeError(
-            "This test must run against the local Firestore emulator "
-            "at 127.0.0.1:8080."
-        )
-
 
 def test_audit_record_and_explanation() -> None:
-    require_firestore_emulator()
 
     db = get_firestore_client()
 
