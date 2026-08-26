@@ -9,7 +9,10 @@ from agent.tools.notification_tools import (
     STATUS_TRIGGERED,
     list_notification_events,
 )
-from agent.tools.taskmaster_tools import run_taskmaster_workflow
+from agent.tools.taskmaster_tools import (
+    DEMO_ESCALATION_DELAY_SECONDS,
+    run_taskmaster_workflow,
+)
 
 
 CONTRACTOR_ID = "C003"
@@ -52,6 +55,17 @@ def test_human_notification_events_are_created_and_scheduled(clean_taskmaster_st
     assert by_channel[CHANNEL_WHATSAPP]["escalation_due_at"]
     assert by_channel[CHANNEL_WHATSAPP]["mode"] == "demo_simulation"
     assert result["escalation_schedule"]["approval_id"] == approval_id
+    assert result["escalation_schedule"]["delay_seconds"] == DEMO_ESCALATION_DELAY_SECONDS == 60
+
+    scheduled_at = datetime.fromisoformat(
+        result["escalation_schedule"]["scheduled_at"]
+    )
+    due_at = datetime.fromisoformat(
+        result["escalation_schedule"]["escalation_due_at"]
+    )
+    assert timedelta(seconds=DEMO_ESCALATION_DELAY_SECONDS) <= (
+        due_at - scheduled_at
+    ) <= timedelta(seconds=DEMO_ESCALATION_DELAY_SECONDS, microseconds=100000)
 
 
 def test_due_escalation_reconciles_without_manual_trigger(clean_taskmaster_state):
