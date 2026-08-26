@@ -1,0 +1,160 @@
+from datetime import datetime, timezone
+from typing import Any
+
+from google.cloud.firestore_v1.base_query import FieldFilter
+
+from agent.firestore_client import get_firestore_client
+
+
+CHANNEL_EMAIL = "email"
+CHANNEL_WHATSAPP = "whatsapp"
+
+STATUS_SIMULATED = "simulated"
+STATUS_TRIGGERED = "triggered"
+STATUS_SENT = "sent"
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _notification_id(channel: str, approval_id: str) -> str:
+    prefix = "EMAIL" if channel == CHANNEL_EMAIL else "WA"
+    return f"NOT-{prefix}-{approval_id}"
+
+
+def create_notification_event(
+    *,
+    channel: str,
+    approval_id: str,
+    contractor_id: str,
+    recipient_roles: list[str],
+    status: str,
+    mode: str,
+    subject: str,
+    message: str,
+    escalation_reason: str | None = None,
+) -> dict[str, Any]:
+    """Create an auditable notification event. External delivery is not claimed."""
+    if channel not in {CHANNEL_EMAIL, CHANNEL_WHATSAPP}:
+        raise ValueError("Unsupported notification channel.")
+
+    notification_id = _notification_id(channel, approval_id)
+    db = get_firestore_client()
+    reference = db.collection("notification_events").document(notification_id)
+    snapshot = reference.get()
+
+    if snapshot.exists:
+        existing = snapshot.to_dict() or {}
+        return {"created": False, "duplicate": True, **existing}
+
+    record = {
+        "notification_id": notification_id,
+        "channel": channel,
+        "approval_id": approval_id,
+        "contractor_id": contractor_id,
+        "recipient_roles": recipient_roles,
+        "status": status,
+        "mode": mode,
+        "subject": subject,
+        "message": message,
+        "escalation_reason": escalation_reason,
+        "created_at": _now(),
+    }
+
+    reference.set(record)
+    return {"created": True, "duplicate": False, **record}
+
+
+def create_human_notification_events(attention: dict[str, Any]) -> list[dict[str, Any]]:
+    """Record the initial email notification and demo escalation state."""
+    approval_id = str(attention.get("approval_id", "")).strip()
+    contractor_id = str(attention.get("contractor_id", "")).strip().upper()
+    roles = attention.get("recipient_roles", []) or ["H&S Practitioner"]
+
+    email = create_notification_event(
+        channel=CHANNEL_EMAIL,
+        approval_id=approval_id,
+        contractor_id=contractor_id,
+        recipient_roles=roles,
+        status=STATUS_SIMULATED,
+        mode="demo_simulation",
+        subject=f"Action required — {contractor_id} contractor readiness",
+        message=(
+            "SiteReady has identified consequential work requiring human review. "
+            f"Approval {approval_id} is awaiting practitioner action."
+        ),
+    )
+
+    escalation = create_notification_event(
+        channel=CHANNEL_WHATSAPP,
+        approval_id=approval_id,
+        contractor_id=contractor_id,
+        recipient_roles=roles,
+        status="scheduled",
+        mode="demo_simulation",
+        subject=f"Escalation — {contractor_id}",
+        message=(
+            "WhatsApp escalation is configured for the demo workflow if the "
+            "human action threshold is reached."
+        ),
+        escalation_reason="No human action within the configured demo window.",
+    )
+
+    return [email, escalation]
+
+
+def list_notification_events(approval_id: str | None = None) -> list[dict[str, Any]]:
+    """Return notification events for the audit timeline."""
+    db = get_firestore_client()
+    query = db.collection("notification_events")
+
+    if approval_id:
+        query = query.where(
+            filter=FieldFilter("approval_id", "==", approval_id.strip())
+        )
+
+    events = [document.to_dict() or {} for document in query.stream()]
+    events.sort(key=lambda item: item.get("created_at", ""))
+    return events
+
+
+def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
+    """Record the WhatsApp escalation trigger; no external WhatsApp is sent."""
+    approval_id = approval_id.strip()
+    if not approval_id:
+        raise ValueError("approval_id is required.")
+
+    db = get_firestore_client()
+    query = db.collection("human_attention").where(
+        filter=FieldFilter("approval_id", "==", approval_id)
+    )
+    attention_documents = list(query.stream())
+
+    if not attention_documents:
+        raise LookupError(f"No human-attention record found for '{approval_id}'.")
+
+    attention = attention_documents[0].to_dict() or {}
+
+    if attention.get("status") == "resolved":
+        return {
+            "triggered": False,
+            "status": "resolved",
+            "approval_id": approval_id,
+            "message": "Escalation stopped because human approval is complete.",
+        }
+
+    return create_notification_event(
+        channel=CHANNEL_WHATSAPP,
+        approval_id=approval_id,
+        contractor_id=str(attention.get("contractor_id", "")),
+        recipient_roles=attention.get("recipient_roles", []) or ["H&S Practitioner"],
+        status=STATUS_TRIGGERED,
+        mode="demo_simulation",
+        subject=f"Escalation required — {attention.get('contractor_id', '')}",
+        message=(
+            "Demo escalation triggered because the human-action threshold "
+            "was reached. No external WhatsApp message was sent."
+        ),
+        escalation_reason="Human action threshold reached.",
+    )
