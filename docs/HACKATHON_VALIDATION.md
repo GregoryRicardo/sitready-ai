@@ -15,7 +15,7 @@ This document records the end-to-end validation completed for the All Things Age
 
 The repository contains a Google ADK `Agent` with `Gemini(model="gemini-3.6-flash")`. The direct ADK/Gemini execution path is provided by `run_agent.py`.
 
-The production web console invokes the authoritative deterministic Taskmaster workflow directly from FastAPI. This is intentional: Gemini provides model reasoning in the ADK agent path, while SiteReady tools and Taskmaster policy control deterministic evidence access, execution, persistence, approval, escalation and verification.
+The production web console invokes the Taskmaster workflow through an ADK/Gemini bridge. Gemini selects the authoritative `run_taskmaster_workflow` tool, while SiteReady tools and Taskmaster policy control deterministic evidence access, execution, persistence, approval, escalation and verification.
 
 ## Production data validation
 
@@ -62,9 +62,9 @@ After explicit human approval through `/api/approve/{approval_id}`, five C003 fo
 
 ## Notification and escalation demo validation
 
-A fresh local C003 workflow was validated using the Firestore emulator.
+The local emulator workflow provides a judge-visible human-attention and escalation layer.
 
-The flow was:
+The flow is:
 
 ```text
 Human attention required
@@ -73,16 +73,22 @@ EMAIL | SIMULATED
         ↓
 WHATSAPP | DEMO — SCHEDULED
         ↓
-30-second demo countdown
+60-second demo countdown
         ↓
 WHATSAPP | DEMO — ESCALATION TRIGGERED
 ```
 
-The escalation event was triggered without a practitioner pressing an escalation button. The audit record includes notification ID, recipient roles, approval ID, timestamp, escalation reason and triggered status.
+The escalation event is triggered without a practitioner pressing an escalation button. The audit record includes notification ID, recipient roles, approval ID, timestamp, escalation reason and triggered status.
 
 Important: these email/WhatsApp events are **demo simulation / audit events**, not evidence of external message delivery. The implementation explicitly records that no external WhatsApp message was sent.
 
-The application reconciles due demo escalations using the persisted `escalation_due_at` timestamp when the notification log is read/polled. This is suitable for the competition demonstration but is not a Cloud Scheduler or Cloud Tasks background worker.
+The application reconciles due demo escalations using the persisted `escalation_due_at` timestamp when the notification log is read/polled. The browser monitoring loop polls the notification endpoint and therefore makes the transition visible during the competition demonstration. This is suitable for the competition demonstration but is not a Cloud Scheduler or Cloud Tasks background worker.
+
+## ADK/Gemini validation
+
+A direct local ADK runner was validated after correcting the Google Cloud ADC quota project configuration. `run_agent.py` successfully executed the SiteReady agent against contractor `C003` and returned a contractor-specific readiness assessment identifying five critical issues.
+
+The production web Taskmaster endpoint is now routed through `app/adk_taskmaster.py`, which invokes the ADK runner and captures the `run_taskmaster_workflow` tool's structured response. API regression tests validate this web-to-ADK routing contract; the full local workflow suite remains green.
 
 ## Approval API
 
@@ -118,7 +124,7 @@ Current regression checkpoint:
 15 passed
 ```
 
-Notification-specific tests cover creation/scheduling, due-escalation reconciliation without a manual trigger, and prevention of escalation after human attention is resolved.
+Notification-specific tests cover creation/scheduling, due-escalation reconciliation without a manual trigger, and prevention of escalation after human attention is resolved. API tests also validate the web-to-ADK routing contract using a controlled test double.
 
 ## Firestore diagnostic cleanup
 
