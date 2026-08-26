@@ -22,6 +22,9 @@ from agent.tools.notification_tools import (
 )
 
 
+DEMO_ESCALATION_DELAY_SECONDS = 60
+
+
 def _requires_human_approval(
     assessment: dict[str, Any],
 ) -> tuple[bool, list[str]]:
@@ -114,7 +117,7 @@ def run_taskmaster_workflow(contractor_id: str) -> dict[str, Any]:
         notifications = create_human_notification_events(attention)
         escalation_schedule = schedule_demo_whatsapp_escalation(
             str(proposal.get("approval_id", "")),
-            delay_seconds=30,
+            delay_seconds=DEMO_ESCALATION_DELAY_SECONDS,
         )
 
         workflow_steps.extend(
