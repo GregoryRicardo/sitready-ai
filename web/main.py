@@ -9,6 +9,10 @@ from agent.tools.change_detection_tools import compare_contractor_assessments
 from agent.tools.explanation_tools import explain_contractor_readiness
 from agent.tools.followup_approval_tools import approve_followup_actions, propose_followup_actions
 from agent.tools.human_attention_tools import list_open_human_attention
+from agent.tools.notification_tools import (
+    list_notification_events,
+    trigger_demo_whatsapp_escalation,
+)
 from agent.tools.taskmaster_tools import run_taskmaster_workflow
 
 
@@ -66,6 +70,18 @@ def attention(contractor_id: str | None = None) -> dict:
     return {
         "items": list_open_human_attention(contractor_id),
     }
+
+
+@app.get("/api/notifications")
+def notifications(approval_id: str | None = None) -> dict:
+    return {
+        "items": list_notification_events(approval_id),
+    }
+
+
+@app.post("/api/notifications/{approval_id}/escalate")
+def escalate_notification(approval_id: str) -> dict:
+    return trigger_demo_whatsapp_escalation(approval_id)
 
 
 @app.post("/api/approve/{approval_id}")
