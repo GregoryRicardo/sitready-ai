@@ -10,6 +10,7 @@ This document is a fast navigation map for judges and reviewers. Each major comp
 | Google ADK is the agent framework | `Agent` + `Gemini` imports and `root_agent = Agent(...)` | `app/agent.py` |
 | ADK/Gemini dependencies are declared | `google-adk[gcp]` dependency | `pyproject.toml` |
 | Direct ADK/Gemini execution path exists | `Runner` executes `root_agent` | `run_agent.py` |
+| Production Taskmaster requests are routed through ADK/Gemini | FastAPI delegates to `run_taskmaster_via_adk`, which captures the authoritative Taskmaster tool result | `web/main.py`, `app/adk_taskmaster.py` |
 
 ## 2. Agentic Workflow
 
@@ -39,11 +40,12 @@ This document is a fast navigation map for judges and reviewers. Each major comp
 |---|---|---|
 | Human notification is persisted | Email notification event is stored with notification ID, recipient roles, timestamp, approval ID and message | `agent/tools/notification_tools.py` |
 | Escalation is scheduled | WhatsApp demo event persists `status=scheduled` and `escalation_due_at` | `agent/tools/notification_tools.py` |
-| Due escalation transitions automatically in the application flow | Due scheduled event is reconciled when the notification log is read/polled | `agent/tools/notification_tools.py`, `web/` |
+| Configured demo window is 60 seconds | Taskmaster uses `DEMO_ESCALATION_DELAY_SECONDS = 60` and tests verify the persisted deadline | `agent/tools/taskmaster_tools.py`, `tests/test_notifications.py` |
+| Due escalation transitions automatically in the application flow | Due scheduled event is reconciled when the notification log is read/polled | `agent/tools/notification_tools.py`, `web/templates/index.html` |
 | Escalation is auditable | Triggered event stores `triggered_at`, reason and final status | `agent/tools/notification_tools.py` |
 | External WhatsApp delivery is not falsely claimed | Demo event explicitly states no external WhatsApp message was sent | `agent/tools/notification_tools.py`, `tests/test_notifications.py` |
 
-Important evidence discipline: the current WhatsApp and email notification channels are **demo simulations / audit events**, not proof of external delivery. The competition demo should say this plainly.
+Important evidence discipline: the current WhatsApp and email notification channels are **demo simulations / audit events**, not proof of external delivery.
 
 ## 5. Production Cloud Architecture
 
@@ -51,6 +53,7 @@ Important evidence discipline: the current WhatsApp and email notification chann
 |---|---|---|
 | Production API is hosted on Cloud Run | Production service and URL are documented | `README.md`, `docs/HACKATHON_VALIDATION.md` |
 | FastAPI exposes the Taskmaster API | `/api/taskmaster/{contractor_id}` | `web/main.py` |
+| Web Taskmaster route delegates through ADK | `/api/taskmaster/{contractor_id}` awaits `run_taskmaster_via_adk` | `web/main.py`, `app/adk_taskmaster.py` |
 | Firestore is the persistence layer | Firestore client and agent tools use persisted collections | `agent/firestore_client.py`, `agent/` |
 | Local/cloud environment separation is hardened | Local requires emulator; cloud rejects emulator configuration | `agent/firestore_client.py` |
 
@@ -104,12 +107,12 @@ CA002
 
 ### C003 — local demo escalation evidence
 
-The local emulator demonstration also validates:
+The local emulator demonstration validates:
 
 ```text
 EMAIL     = SIMULATED
 WHATSAPP  = DEMO — SCHEDULED
-countdown = 30 seconds
+countdown = 60 seconds
 then      = DEMO — ESCALATION TRIGGERED
 ```
 
@@ -179,6 +182,9 @@ Agent Activity
 Notification & Escalation Log
 EMAIL → SIMULATED
 WHATSAPP → DEMO — SCHEDULED → DEMO — ESCALATION TRIGGERED
+
+Escalation monitor
+Escalation in 60s
 ```
 
 The UI also identifies the technology stack:
@@ -192,6 +198,7 @@ Implementation locations:
 - `web/templates/index.html`
 - `web/static/app.js`
 - `web/static/style.css`
+- `web/main.py`
 
 ## 10. Competition Navigation
 
@@ -202,12 +209,13 @@ Start here when reviewing the repository:
 3. `docs/HACKATHON_VALIDATION.md` — production validation record.
 4. `docs/JUDGE_EVIDENCE_MATRIX.md` — claim-to-code traceability.
 5. `app/agent.py` — Gemini + ADK implementation.
-6. `run_agent.py` — direct ADK/Gemini runner.
-7. `agent/tools/taskmaster_tools.py` — Taskmaster workflow and policy boundary.
-8. `agent/tools/notification_tools.py` — notification/escalation audit layer.
-9. `web/main.py` — production API boundary.
-10. `tests/` — automated regression evidence.
-11. `web/` — judge-facing interface.
+6. `app/adk_taskmaster.py` — web-to-ADK bridge and structured tool-result capture.
+7. `run_agent.py` — direct ADK/Gemini runner.
+8. `agent/tools/taskmaster_tools.py` — Taskmaster workflow and policy boundary.
+9. `agent/tools/notification_tools.py` — notification/escalation audit layer.
+10. `web/main.py` — production API boundary.
+11. `tests/` — automated regression evidence.
+12. `web/` — judge-facing interface.
 
 ## 11. Evidence Discipline
 
@@ -218,6 +226,8 @@ The competition submission should distinguish clearly between:
 - **validated in production** — Cloud Run + Firestore execution evidence;
 - **demonstrated in the video** — judge-facing visual evidence.
 
-Do not claim that Gemini itself directly performs deterministic database writes or safety-rule evaluation. The defensible architecture is: Gemini provides the model reasoning layer through Google ADK, while SiteReady tools and the Taskmaster policy control evidence access, execution boundaries, persistence, approval, escalation, and verification.
+Do not claim that Gemini itself directly performs deterministic database writes or safety-rule evaluation. The defensible architecture is: Gemini provides the model reasoning and tool-orchestration layer through Google ADK, while SiteReady tools and the Taskmaster policy control evidence access, execution boundaries, persistence, approval, escalation, and verification.
 
-Also be explicit that the production web console currently invokes the authoritative deterministic Taskmaster workflow directly from FastAPI, while `run_agent.py` exercises the Google ADK/Gemini agent path. Do not present the web console alone as proof that Gemini directly performed each database operation.
+For the current production web path, the UI request is routed through the ADK/Gemini bridge. The bridge instructs Gemini to use the authoritative `run_taskmaster_workflow` tool and returns that tool's structured result to FastAPI. The Taskmaster tool remains the deterministic control plane for consequential execution and persistence.
+
+Be explicit that the email and WhatsApp notification records are demo simulation/audit events rather than external delivery proof.
