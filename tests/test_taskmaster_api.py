@@ -19,8 +19,7 @@ def test_c002_taskmaster_api(clean_taskmaster_state, monkeypatch) -> None:
     """
     calls = []
 
-    def fake_adk(contractor_id: str) -> dict:
-        calls.append(contractor_id)
+    def fake_adk_result() -> dict:
         return {
             "workflow_status": "completed",
             "execution_mode": "autonomous",
@@ -35,7 +34,7 @@ def test_c002_taskmaster_api(clean_taskmaster_state, monkeypatch) -> None:
 
     async def fake_adk_async(contractor_id: str) -> dict:
         calls.append(contractor_id)
-        return fake_adk(contractor_id)
+        return fake_adk_result()
 
     monkeypatch.setattr(web_main, "run_taskmaster_via_adk", fake_adk_async)
 
