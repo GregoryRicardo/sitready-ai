@@ -18,20 +18,12 @@ def _attention_document_id(approval_id: str) -> str:
 
 
 def create_human_attention(approval: dict[str, Any]) -> dict[str, Any]:
-    """
-    Create or reuse an in-app human-attention record for a pending approval.
-
-    This is a notification/work-queue record. It does not approve or create
-    follow-up actions and therefore does not bypass the Taskmaster boundary.
-    """
-
+    """Create or reuse an in-app human-attention record for a pending approval."""
     approval_id = str(approval.get("approval_id", "")).strip()
-
     if not approval_id:
         raise ValueError("approval_id is required to create human attention.")
 
     contractor_id = str(approval.get("contractor_id", "")).strip().upper()
-
     if not contractor_id:
         raise ValueError("contractor_id is required to create human attention.")
 
@@ -43,11 +35,7 @@ def create_human_attention(approval: dict[str, Any]) -> dict[str, Any]:
 
     if snapshot.exists:
         existing = snapshot.to_dict() or {}
-        return {
-            "created": False,
-            "duplicate": True,
-            **existing,
-        }
+        return {"created": False, "duplicate": True, **existing}
 
     proposed_actions = approval.get("proposed_actions", []) or []
     issues = approval.get("issues", []) or []
@@ -58,10 +46,7 @@ def create_human_attention(approval: dict[str, Any]) -> dict[str, Any]:
             for action in proposed_actions
             if action.get("owner")
         }
-    )
-
-    if not recipient_roles:
-        recipient_roles = ["H&S Practitioner"]
+    ) or ["H&S Practitioner"]
 
     now = datetime.now(timezone.utc).isoformat()
 
@@ -91,12 +76,7 @@ def create_human_attention(approval: dict[str, Any]) -> dict[str, Any]:
     }
 
     reference.set(record)
-
-    return {
-        "created": True,
-        "duplicate": False,
-        **record,
-    }
+    return {"created": True, "duplicate": False, **record}
 
 
 
@@ -104,7 +84,6 @@ def list_open_human_attention(
     contractor_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return open/acknowledged human-attention records."""
-
     db = get_firestore_client()
     query = db.collection("human_attention")
 
@@ -118,7 +97,6 @@ def list_open_human_attention(
         )
 
     records: list[dict[str, Any]] = []
-
     for document in query.stream():
         record = document.to_dict() or {}
         if record.get("status") in {
@@ -131,7 +109,6 @@ def list_open_human_attention(
         key=lambda item: item.get("created_at", ""),
         reverse=True,
     )
-
     return records
 
 
@@ -141,15 +118,13 @@ def resolve_human_attention(
     resolved_by: str = "human_reviewer",
 ) -> dict[str, Any]:
     """Resolve all attention records associated with an approval ID."""
-
     approval_id = approval_id.strip()
-    resolved_by = resolved_by.strip()
+    resolved_by = resolved_by.strip() or "human_reviewer"
 
     if not approval_id:
         raise ValueError("approval_id is required.")
 
     db = get_firestore_client()
-
     query = db.collection("human_attention").where(
         filter=FieldFilter(
             "approval_id",
@@ -160,20 +135,23 @@ def resolve_human_attention(
 
     resolved_count = 0
     resolved_at = datetime.now(timezone.utc).isoformat()
+    resolved_by_value = None
 
     for document in query.stream():
         document.reference.update(
             {
                 "status": ATTENTION_STATUS_RESOLVED,
                 "resolved_at": resolved_at,
-                "resolved_by": resolved_by or "human_reviewer",
+                "resolved_by": resolved_by,
             }
         )
+        resolved_by_value = resolved_by
         resolved_count += 1
 
     return {
         "approval_id": approval_id,
         "resolved_count": resolved_count,
         "resolved_at": resolved_at,
+        "resolved_by": resolved_by_value,
         "status": ATTENTION_STATUS_RESOLVED,
     }
