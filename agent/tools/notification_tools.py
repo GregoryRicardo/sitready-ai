@@ -105,13 +105,17 @@ def create_human_notification_events(attention: dict[str, Any]) -> list[dict[str
     return [email, escalation]
 
 
-def _scheduled_whatsapp_events(db) -> list[Any]:
-    return list(
-        db.collection("notification_events")
-        .where(filter=FieldFilter("channel", "==", CHANNEL_WHATSAPP))
-        .where(filter=FieldFilter("status", "==", STATUS_SCHEDULED))
-        .stream()
-    )
+def _scheduled_whatsapp_events(db, approval_id: str | None = None) -> list[Any]:
+    query = db.collection("notification_events")
+    query = query.where(filter=FieldFilter("channel", "==", CHANNEL_WHATSAPP))
+    query = query.where(filter=FieldFilter("status", "==", STATUS_SCHEDULED))
+
+    if approval_id:
+        query = query.where(
+            filter=FieldFilter("approval_id", "==", approval_id.strip())
+        )
+
+    return list(query.stream())
 
 
 def _is_due(event: dict[str, Any], now: datetime) -> bool:
@@ -130,20 +134,21 @@ def _is_due(event: dict[str, Any], now: datetime) -> bool:
     return due_time <= now
 
 
-def reconcile_due_escalations() -> int:
-    """Trigger due demo escalations when the notification service is queried.
-
-    The deadline is persisted in Firestore. This reconciliation path avoids
-    relying on an in-process timer surviving long enough to reach the deadline.
-    """
+def reconcile_due_escalations(approval_id: str | None = None) -> int:
+    """Trigger due demo escalations, optionally limited to one approval."""
     db = get_firestore_client()
     now = datetime.now(timezone.utc)
     triggered_count = 0
 
-    for document in _scheduled_whatsapp_events(db):
+    for document in _scheduled_whatsapp_events(db, approval_id):
         event = document.to_dict() or {}
         if _is_due(event, now):
-            result = trigger_demo_whatsapp_escalation(event["approval_id"])
+            try:
+                result = trigger_demo_whatsapp_escalation(event["approval_id"])
+            except LookupError:
+                # Ignore orphaned notification events. They must not prevent a
+                # current approval's notification log from being read.
+                continue
             if result.get("triggered"):
                 triggered_count += 1
 
@@ -151,8 +156,8 @@ def reconcile_due_escalations() -> int:
 
 
 def list_notification_events(approval_id: str | None = None) -> list[dict[str, Any]]:
-    """Return notification events and reconcile any due escalations first."""
-    reconcile_due_escalations()
+    """Return notification events and reconcile due escalations for this approval."""
+    reconcile_due_escalations(approval_id)
 
     db = get_firestore_client()
     query = db.collection("notification_events")
