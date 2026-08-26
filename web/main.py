@@ -13,7 +13,7 @@ from agent.tools.notification_tools import (
     list_notification_events,
     trigger_demo_whatsapp_escalation,
 )
-from agent.tools.taskmaster_tools import run_taskmaster_workflow
+from app.adk_taskmaster import run_taskmaster_via_adk
 
 
 app = FastAPI(
@@ -61,8 +61,8 @@ def propose(contractor_id: str) -> dict:
 
 
 @app.post("/api/taskmaster/{contractor_id}")
-def taskmaster(contractor_id: str) -> dict:
-    return run_taskmaster_workflow(contractor_id)
+async def taskmaster(contractor_id: str) -> dict:
+    return await run_taskmaster_via_adk(contractor_id)
 
 
 @app.get("/api/attention")
