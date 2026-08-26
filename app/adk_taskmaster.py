@@ -16,9 +16,9 @@ TASKMASTER_TOOL = "run_taskmaster_workflow"
 async def run_taskmaster_via_adk(contractor_id: str) -> dict:
     """Run the Taskmaster workflow through the ADK/Gemini agent once.
 
-    The Gemini agent is responsible for selecting the authoritative
-    Taskmaster tool. The Taskmaster tool remains responsible for policy,
-    persistence, human approval, actions, notifications, and verification.
+    Gemini selects the authoritative Taskmaster tool. The Taskmaster tool
+    remains responsible for policy, persistence, human approval, actions,
+    notifications, and verification.
     """
     contractor_id = contractor_id.strip().upper()
     if not contractor_id:
@@ -51,15 +51,15 @@ async def run_taskmaster_via_adk(contractor_id: str) -> dict:
         parts=[types.Part(text=prompt)],
     )
 
-    tool_result: dict | None = None
-    final_text: str | None = None
+    holder: dict[str, object] = {"tool_result": None, "final_text": None}
 
     async for event in runner.run_async(
         user_id=USER_ID,
         session_id=session_id,
         new_message=message,
     ):
-        _capture_taskmaster_tool_response(event, tool_result_holder := locals())
+        _capture_taskmaster_tool_response(event, holder)
+
         if event.is_final_response() and event.content and event.content.parts:
             texts = [
                 part.text
@@ -67,13 +67,16 @@ async def run_taskmaster_via_adk(contractor_id: str) -> dict:
                 if getattr(part, "text", None)
             ]
             if texts:
-                final_text = "\n".join(texts)
+                holder["final_text"] = "\n".join(texts)
 
-    tool_result = tool_result_holder.get("tool_result")
+    tool_result = holder["tool_result"]
+    final_text = holder["final_text"]
+
     if tool_result is None:
+        detail = f" Agent response: {final_text}" if final_text else ""
         raise RuntimeError(
             "ADK completed without returning a run_taskmaster_workflow tool result."
-            + (f" Agent response: {final_text}" if final_text else "")
+            + detail
         )
 
     if not isinstance(tool_result, dict):
@@ -82,7 +85,7 @@ async def run_taskmaster_via_adk(contractor_id: str) -> dict:
     return tool_result
 
 
-def _capture_taskmaster_tool_response(event: Event, holder: dict) -> None:
+def _capture_taskmaster_tool_response(event: Event, holder: dict[str, object]) -> None:
     """Capture the authoritative Taskmaster tool response from an ADK event."""
     for function_response in event.get_function_responses() or []:
         if getattr(function_response, "name", None) != TASKMASTER_TOOL:
