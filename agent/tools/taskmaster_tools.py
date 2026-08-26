@@ -15,6 +15,7 @@ from agent.tools.followup_approval_tools import (
 from agent.tools.followup_orchestration import (
     create_followup_actions_for_readiness,
 )
+from agent.tools.human_attention_tools import create_human_attention
 
 
 def _requires_human_approval(
@@ -106,7 +107,8 @@ def run_taskmaster_workflow(
     4. Determines whether human approval is required.
     5. Automatically executes routine work when permitted.
     6. Creates a pending approval for consequential work.
-    7. Verifies autonomous execution results.
+    7. Creates a persistent human-attention item for the practitioner.
+    8. Verifies autonomous execution results.
 
     Consequential work is never executed automatically.
     """
@@ -118,35 +120,17 @@ def run_taskmaster_workflow(
 
     contractor_id = contractor_id.strip().upper()
 
-    # ---------------------------------------------------------
-    # STEP 1 — ASSESS + AUDIT
-    # ---------------------------------------------------------
-
-    assessment = (
-        assess_contractor_readiness_with_audit(
-            contractor_id
-        )
+    assessment = assess_contractor_readiness_with_audit(
+        contractor_id
     )
-
-    # ---------------------------------------------------------
-    # STEP 2 — HISTORICAL COMPARISON
-    # ---------------------------------------------------------
 
     comparison = compare_contractor_assessments(
         contractor_id
     )
 
-    # ---------------------------------------------------------
-    # STEP 3 — EXPLANATION
-    # ---------------------------------------------------------
-
     explanation = explain_contractor_readiness(
         contractor_id
     )
-
-    # ---------------------------------------------------------
-    # STEP 4 — RISK / EXECUTION POLICY
-    # ---------------------------------------------------------
 
     approval_required, approval_reasons = (
         _requires_human_approval(assessment)
@@ -183,20 +167,27 @@ def run_taskmaster_workflow(
         },
     ]
 
-    # ---------------------------------------------------------
-    # STEP 5A — CONSEQUENTIAL WORK
-    # ---------------------------------------------------------
-
     if approval_required:
         proposal = propose_followup_actions(
             contractor_id
         )
+
+        attention = create_human_attention(proposal)
 
         workflow_steps.append(
             {
                 "step": "execution_policy",
                 "status": "approval_required",
                 "reasons": approval_reasons,
+            }
+        )
+
+        workflow_steps.append(
+            {
+                "step": "human_attention",
+                "status": "open",
+                "attention_id": attention.get("attention_id"),
+                "approval_id": proposal.get("approval_id"),
             }
         )
 
@@ -235,18 +226,15 @@ def run_taskmaster_workflow(
             "approval_required": True,
             "approval_reasons": approval_reasons,
             "approval": proposal,
+            "human_attention": attention,
             "workflow_steps": workflow_steps,
             "message": (
                 "The Taskmaster workflow completed its "
-                "investigation and prepared the required "
-                "follow-up actions, but consequential work "
-                "requires human approval."
+                "investigation, created a practitioner attention item, "
+                "and prepared the required follow-up actions, but "
+                "consequential work requires human approval."
             ),
         }
-
-    # ---------------------------------------------------------
-    # STEP 5B — AUTONOMOUS EXECUTION
-    # ---------------------------------------------------------
 
     execution = create_followup_actions_for_readiness(
         contractor_id
