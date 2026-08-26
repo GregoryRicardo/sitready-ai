@@ -105,8 +105,70 @@ def create_human_notification_events(attention: dict[str, Any]) -> list[dict[str
     return [email, escalation]
 
 
+def _scheduled_whatsapp_events(db) -> list[Any]:
+    return list(
+        db.collection("notification_events")
+        .where(filter=FieldFilter("channel", "==", CHANNEL_WHATSAPP))
+        .where(filter=FieldFilter("status", "==", STATUS_SCHEDULED))
+        .stream()
+    )
+
+
+def _is_due(event: dict[str, Any], now: datetime) -> bool:
+    due_at = event.get("escalation_due_at")
+    if not due_at:
+        return False
+
+    try:
+        due_time = datetime.fromisoformat(str(due_at))
+    except ValueError:
+        return False
+
+    if due_time.tzinfo is None:
+        due_time = due_time.replace(tzinfo=timezone.utc)
+
+    return due_time <= now
+
+
+def reconcile_due_escalations() -> int:
+    """Trigger due demo escalations when the notification service is queried.
+
+    The deadline is persisted in Firestore. This reconciliation path avoids
+    relying on an in-process timer surviving long enough to reach the deadline.
+    """
+    db = get_firestore_client()
+    now = datetime.now(timezone.utc)
+    triggered_count = 0
+
+    for document in _scheduled_whatsapp_events(db):
+        event = document.to_dict() or {}
+        if _is_due(event, now):
+            result = trigger_demo_whatsapp_escalation(event["approval_id"])
+            if result.get("triggered"):
+                triggered_count += 1
+
+    return triggered_count
+
+
+def list_notification_events(approval_id: str | None = None) -> list[dict[str, Any]]:
+    """Return notification events and reconcile any due escalations first."""
+    reconcile_due_escalations()
+
+    db = get_firestore_client()
+    query = db.collection("notification_events")
+
+    if approval_id:
+        query = query.where(
+            filter=FieldFilter("approval_id", "==", approval_id.strip())
+        )
+
+    events = [document.to_dict() or {} for document in query.stream()]
+    events.sort(key=lambda item: item.get("created_at", ""))
+    return events
+
+
 def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
-    """Transition the scheduled demo escalation to triggered; no external message is sent."""
+    """Update the scheduled WhatsApp demo event to triggered; no external message is sent."""
     approval_id = approval_id.strip()
     if not approval_id:
         raise ValueError("approval_id is required.")
@@ -138,7 +200,11 @@ def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
     if snapshot.exists:
         existing = snapshot.to_dict() or {}
         if existing.get("status") == STATUS_TRIGGERED:
-            return {"triggered": False, "duplicate": True, **existing}
+            return {
+                "triggered": False,
+                "duplicate": True,
+                **existing,
+            }
 
         updated = {
             **existing,
@@ -151,7 +217,11 @@ def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
             "triggered_at": triggered_at,
         }
         reference.set(updated)
-        return {"triggered": True, "duplicate": False, **updated}
+        return {
+            "triggered": True,
+            "duplicate": False,
+            **updated,
+        }
 
     record = create_notification_event(
         channel=CHANNEL_WHATSAPP,
@@ -170,58 +240,11 @@ def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
     return {"triggered": True, **record}
 
 
-def _auto_trigger_due_escalation(approval_id: str, event: dict[str, Any]) -> dict[str, Any]:
-    """Transition a due scheduled escalation on the server side."""
-    if event.get("status") != STATUS_SCHEDULED:
-        return event
-
-    due_at = event.get("escalation_due_at")
-    if not due_at:
-        return event
-
-    try:
-        due_time = datetime.fromisoformat(due_at)
-    except (TypeError, ValueError):
-        return event
-
-    if due_time > datetime.now(timezone.utc):
-        return event
-
-    result = trigger_demo_whatsapp_escalation(approval_id)
-    if result.get("triggered"):
-        return result
-    return {**event, "status": result.get("status", event.get("status"))}
-
-
-def list_notification_events(approval_id: str | None = None) -> list[dict[str, Any]]:
-    """Return notification events and server-side trigger any due demo escalation."""
-    db = get_firestore_client()
-    query = db.collection("notification_events")
-
-    if approval_id:
-        query = query.where(
-            filter=FieldFilter("approval_id", "==", approval_id.strip())
-        )
-
-    events = [document.to_dict() or {} for document in query.stream()]
-
-    if approval_id:
-        events = [
-            _auto_trigger_due_escalation(approval_id.strip(), event)
-            if event.get("channel") == CHANNEL_WHATSAPP
-            else event
-            for event in events
-        ]
-
-    events.sort(key=lambda item: item.get("created_at", ""))
-    return events
-
-
 def schedule_demo_whatsapp_escalation(
     approval_id: str,
     delay_seconds: int = 30,
 ) -> dict[str, Any]:
-    """Persist the agent-driven escalation due time for deterministic monitoring."""
+    """Persist the agent-driven demo escalation deadline."""
     approval_id = approval_id.strip()
     if not approval_id:
         raise ValueError("approval_id is required.")
@@ -231,6 +254,10 @@ def schedule_demo_whatsapp_escalation(
     notification_id = _notification_id(CHANNEL_WHATSAPP, approval_id)
     reference = db.collection("notification_events").document(notification_id)
     snapshot = reference.get()
+
+    now = datetime.now(timezone.utc)
+    scheduled_at = now.isoformat()
+    due_at = (now + timedelta(seconds=safe_delay)).isoformat()
 
     if not snapshot.exists:
         raise LookupError(
@@ -244,18 +271,25 @@ def schedule_demo_whatsapp_escalation(
             "scheduled": False,
             "already_triggered": True,
             "approval_id": approval_id,
-            "delay_seconds": 0,
+            "delay_seconds": safe_delay,
             "mode": "demo_simulation",
             "escalation_due_at": existing.get("escalation_due_at"),
         }
 
-    now = datetime.now(timezone.utc)
-    due_at = (now + timedelta(seconds=safe_delay)).isoformat()
+    if existing.get("status") == STATUS_SCHEDULED and existing.get("escalation_due_at"):
+        return {
+            "scheduled": True,
+            "already_scheduled": True,
+            "approval_id": approval_id,
+            "delay_seconds": safe_delay,
+            "mode": "demo_simulation",
+            "escalation_due_at": existing["escalation_due_at"],
+        }
 
     updated = {
         **existing,
         "status": STATUS_SCHEDULED,
-        "scheduled_at": now.isoformat(),
+        "scheduled_at": scheduled_at,
         "escalation_due_at": due_at,
     }
     reference.set(updated)
@@ -266,6 +300,6 @@ def schedule_demo_whatsapp_escalation(
         "approval_id": approval_id,
         "delay_seconds": safe_delay,
         "mode": "demo_simulation",
-        "scheduled_at": now.isoformat(),
+        "scheduled_at": scheduled_at,
         "escalation_due_at": due_at,
     }
