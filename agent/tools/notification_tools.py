@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import threading
 from typing import Any
 
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -12,6 +13,7 @@ CHANNEL_WHATSAPP = "whatsapp"
 STATUS_SIMULATED = "simulated"
 STATUS_TRIGGERED = "triggered"
 STATUS_SENT = "sent"
+STATUS_SCHEDULED = "scheduled"
 
 
 def _now() -> str:
@@ -67,7 +69,7 @@ def create_notification_event(
 
 
 def create_human_notification_events(attention: dict[str, Any]) -> list[dict[str, Any]]:
-    """Record the initial email notification and demo escalation state."""
+    """Record the initial email notification and scheduled demo escalation."""
     approval_id = str(attention.get("approval_id", "")).strip()
     contractor_id = str(attention.get("contractor_id", "")).strip().upper()
     roles = attention.get("recipient_roles", []) or ["H&S Practitioner"]
@@ -91,12 +93,12 @@ def create_human_notification_events(attention: dict[str, Any]) -> list[dict[str
         approval_id=approval_id,
         contractor_id=contractor_id,
         recipient_roles=roles,
-        status="scheduled",
+        status=STATUS_SCHEDULED,
         mode="demo_simulation",
         subject=f"Escalation — {contractor_id}",
         message=(
-            "WhatsApp escalation is configured for the demo workflow if the "
-            "human action threshold is reached."
+            "The agent has scheduled a demo WhatsApp escalation if the human-action "
+            "threshold is reached. No external WhatsApp message is sent."
         ),
         escalation_reason="No human action within the configured demo window.",
     )
@@ -120,16 +122,16 @@ def list_notification_events(approval_id: str | None = None) -> list[dict[str, A
 
 
 def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
-    """Record the WhatsApp escalation trigger; no external WhatsApp is sent."""
+    """Update the scheduled WhatsApp demo event to triggered; no external message is sent."""
     approval_id = approval_id.strip()
     if not approval_id:
         raise ValueError("approval_id is required.")
 
     db = get_firestore_client()
-    query = db.collection("human_attention").where(
+    attention_query = db.collection("human_attention").where(
         filter=FieldFilter("approval_id", "==", approval_id)
     )
-    attention_documents = list(query.stream())
+    attention_documents = list(attention_query.stream())
 
     if not attention_documents:
         raise LookupError(f"No human-attention record found for '{approval_id}'.")
@@ -144,7 +146,38 @@ def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
             "message": "Escalation stopped because human approval is complete.",
         }
 
-    return create_notification_event(
+    notification_id = _notification_id(CHANNEL_WHATSAPP, approval_id)
+    reference = db.collection("notification_events").document(notification_id)
+    snapshot = reference.get()
+    triggered_at = _now()
+
+    if snapshot.exists:
+        existing = snapshot.to_dict() or {}
+        if existing.get("status") == STATUS_TRIGGERED:
+            return {
+                "triggered": False,
+                "duplicate": True,
+                **existing,
+            }
+
+        updated = {
+            **existing,
+            "status": STATUS_TRIGGERED,
+            "message": (
+                "Demo escalation triggered by the agent because the human-action "
+                "threshold was reached. No external WhatsApp message was sent."
+            ),
+            "escalation_reason": "Human action threshold reached.",
+            "triggered_at": triggered_at,
+        }
+        reference.set(updated)
+        return {
+            "triggered": True,
+            "duplicate": False,
+            **updated,
+        }
+
+    record = create_notification_event(
         channel=CHANNEL_WHATSAPP,
         approval_id=approval_id,
         contractor_id=str(attention.get("contractor_id", "")),
@@ -153,8 +186,36 @@ def trigger_demo_whatsapp_escalation(approval_id: str) -> dict[str, Any]:
         mode="demo_simulation",
         subject=f"Escalation required — {attention.get('contractor_id', '')}",
         message=(
-            "Demo escalation triggered because the human-action threshold "
-            "was reached. No external WhatsApp message was sent."
+            "Demo escalation triggered by the agent because the human-action "
+            "threshold was reached. No external WhatsApp message was sent."
         ),
         escalation_reason="Human action threshold reached.",
     )
+    return {"triggered": True, **record}
+
+
+def schedule_demo_whatsapp_escalation(
+    approval_id: str,
+    delay_seconds: int = 30,
+) -> dict[str, Any]:
+    """Schedule the agent-driven demo escalation timer."""
+    approval_id = approval_id.strip()
+    if not approval_id:
+        raise ValueError("approval_id is required.")
+
+    safe_delay = max(1, int(delay_seconds))
+
+    timer = threading.Timer(
+        safe_delay,
+        trigger_demo_whatsapp_escalation,
+        args=(approval_id,),
+    )
+    timer.daemon = True
+    timer.start()
+
+    return {
+        "scheduled": True,
+        "approval_id": approval_id,
+        "delay_seconds": safe_delay,
+        "mode": "demo_simulation",
+    }
