@@ -30,9 +30,16 @@ def _notification_documents(db, approval_id: str) -> list[dict]:
     ]
 
 
+def _run_approval_workflow(contractor_id: str, db):
+    result = run_taskmaster_workflow(contractor_id)
+    approval_id = result["approval"]["approval_id"]
+    assert result["approval_required"] is True
+    assert result["human_attention"]["approval_id"] == approval_id
+    return result, approval_id
+
+
 def test_human_notification_events_are_created_and_scheduled(clean_taskmaster_state):
-    result = run_taskmaster_workflow(CONTRACTOR_ID)
-    approval_id = result["approval_id"]
+    result, approval_id = _run_approval_workflow(CONTRACTOR_ID, clean_taskmaster_state)
 
     events = _notification_documents(clean_taskmaster_state, approval_id)
 
@@ -44,11 +51,11 @@ def test_human_notification_events_are_created_and_scheduled(clean_taskmaster_st
     assert by_channel[CHANNEL_WHATSAPP]["status"] == STATUS_SCHEDULED
     assert by_channel[CHANNEL_WHATSAPP]["escalation_due_at"]
     assert by_channel[CHANNEL_WHATSAPP]["mode"] == "demo_simulation"
+    assert result["escalation_schedule"]["approval_id"] == approval_id
 
 
 def test_due_escalation_reconciles_without_manual_trigger(clean_taskmaster_state):
-    result = run_taskmaster_workflow(CONTRACTOR_ID)
-    approval_id = result["approval_id"]
+    _, approval_id = _run_approval_workflow(CONTRACTOR_ID, clean_taskmaster_state)
     db = clean_taskmaster_state
 
     whatsapp_ref = (
@@ -83,8 +90,7 @@ def test_due_escalation_reconciles_without_manual_trigger(clean_taskmaster_state
 
 
 def test_resolved_attention_stops_escalation(clean_taskmaster_state):
-    result = run_taskmaster_workflow(CONTRACTOR_ID)
-    approval_id = result["approval_id"]
+    result, approval_id = _run_approval_workflow(CONTRACTOR_ID, clean_taskmaster_state)
     db = clean_taskmaster_state
 
     db.collection("human_attention").document(
