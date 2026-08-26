@@ -103,7 +103,7 @@
             <div id="escalation-timer" class="approval-box hidden">
                 <strong>Demo escalation monitor</strong>
                 <span id="escalation-countdown">--</span>
-                <small>If no human action is received, the agent will trigger the demo escalation automatically.</small>
+                <small>No human action received. The agent will automatically trigger the demo escalation when the countdown reaches zero.</small>
             </div>
 
             <div id="notification-log"></div>
@@ -136,7 +136,7 @@
         let notificationApprovalId = null;
         let notificationMonitorInterval = null;
         const STORAGE_KEY = "siteready.ui.state.v2";
-        const DEMO_ESCALATION_SECONDS = 30;
+        const DEMO_ESCALATION_SECONDS = 60;
 
         function escapeHtml(value) {
             return String(value ?? "")
@@ -211,7 +211,7 @@
 
             const remaining = (new Date(dueAt).getTime() - Date.now()) / 1000;
             timer.classList.remove("hidden");
-            countdown.textContent = formatCountdown(Math.max(remaining, 0));
+            countdown.textContent = `Escalation in ${formatCountdown(Math.max(remaining, 0))}`;
         }
 
         async function refreshNotificationLog(approvalId = notificationApprovalId) {
