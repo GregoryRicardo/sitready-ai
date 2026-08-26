@@ -1,20 +1,9 @@
 from typing import Any
-
-from agent.tools.audited_readiness_tools import (
-    assess_contractor_readiness_with_audit,
-)
-from agent.tools.change_detection_tools import (
-    compare_contractor_assessments,
-)
-from agent.tools.explanation_tools import (
-    explain_contractor_readiness,
-)
-from agent.tools.followup_approval_tools import (
-    propose_followup_actions,
-)
-from agent.tools.followup_orchestration import (
-    create_followup_actions_for_readiness,
-)
+from agent.tools.audited_readiness_tools import assess_contractor_readiness_with_audit
+from agent.tools.change_detection_tools import compare_contractor_assessments
+from agent.tools.explanation_tools import explain_contractor_readiness
+from agent.tools.followup_approval_tools import propose_followup_actions
+from agent.tools.followup_orchestration import create_followup_actions_for_readiness
 from agent.tools.human_attention_tools import create_human_attention
 from agent.tools.notification_tools import (
     create_human_notification_events,
@@ -22,7 +11,7 @@ from agent.tools.notification_tools import (
 )
 
 
-DEMO_ESCALATION_DELAY_SECONDS = 60
+DEMO_ESCALATION_DELAY_SECONDS = 120
 
 
 def _requires_human_approval(
