@@ -32,13 +32,9 @@
             <div class="section-heading">
                 <div>
                     <h2>Human Attention Required</h2>
-                    <p class="section-subtitle">
-                        Practitioner work queue — items requiring human review
-                    </p>
+                    <p class="section-subtitle">Practitioner work queue — items requiring human review</p>
                 </div>
-                <button type="button" onclick="refreshHumanAttention()">
-                    Refresh
-                </button>
+                <button type="button" onclick="refreshHumanAttention()">Refresh</button>
             </div>
             <div id="human-attention-list"></div>
         </section>
@@ -94,6 +90,28 @@
             <div id="agent-activity"></div>
         </section>
 
+        <section id="notification-card" class="card hidden">
+            <div class="section-heading">
+                <div>
+                    <h2>Notification &amp; Escalation Log</h2>
+                    <p class="section-subtitle">Auditable human-notification state and escalation events</p>
+                </div>
+                <button type="button" onclick="refreshNotificationLog()">Refresh</button>
+            </div>
+
+            <div id="escalation-timer" class="approval-box hidden">
+                <strong>Demo escalation monitor</strong>
+                <span id="escalation-countdown">30s</span>
+                <small>If no human action is received, the demo escalation can be triggered.</small>
+            </div>
+
+            <div id="notification-log"></div>
+
+            <div id="notification-actions" class="actions hidden">
+                <button type="button" onclick="triggerDemoEscalation()">Trigger Demo WhatsApp Escalation</button>
+            </div>
+        </section>
+
         <section id="results" class="card hidden">
             <h2>AI Findings</h2>
             <div id="results-content"></div>
@@ -126,6 +144,113 @@
 
     <script src="/static/app.js"></script>
     <script>
+        let notificationApprovalId = null;
+        let escalationInterval = null;
+        let escalationSeconds = 30;
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function notificationStatusLabel(event) {
+            if (event.channel === "whatsapp" && event.mode === "demo_simulation") {
+                if (event.status === "triggered") return "DEMO — ESCALATION TRIGGERED";
+                return "DEMO — SCHEDULED";
+            }
+            return String(event.status || "UNKNOWN").toUpperCase();
+        }
+
+        async function refreshNotificationLog(approvalId = notificationApprovalId) {
+            if (!approvalId) return;
+
+            try {
+                const response = await fetch(`/api/notifications?approval_id=${encodeURIComponent(approvalId)}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
+
+                const events = data.items || data.events || [];
+                const card = document.getElementById("notification-card");
+                const log = document.getElementById("notification-log");
+                const actions = document.getElementById("notification-actions");
+
+                card.classList.remove("hidden");
+
+                if (!events.length) {
+                    log.innerHTML = "<p>No notification events recorded yet.</p>";
+                    actions.classList.add("hidden");
+                    return;
+                }
+
+                log.innerHTML = events.map(event => `
+                    <div class="issue">
+                        <strong>${escapeHtml(new Date(event.created_at).toLocaleTimeString())}</strong>
+                        <div>
+                            ${escapeHtml(String(event.channel || "").toUpperCase())}
+                            &nbsp;|&nbsp;
+                            <strong>${escapeHtml(notificationStatusLabel(event))}</strong>
+                        </div>
+                        <small>
+                            Recipient: ${escapeHtml((event.recipient_roles || []).join(", "))}
+                            &nbsp;|&nbsp; Notification: ${escapeHtml(event.notification_id)}
+                        </small>
+                        <div>${escapeHtml(event.message)}</div>
+                        ${event.escalation_reason ? `<small>Reason: ${escapeHtml(event.escalation_reason)}</small>` : ""}
+                    </div>
+                `).join("");
+
+                const whatsappTriggered = events.some(event => event.channel === "whatsapp" && event.status === "triggered");
+                actions.classList.toggle("hidden", whatsappTriggered);
+            } catch (error) {
+                console.error("Notification log refresh failed:", error);
+            }
+        }
+
+        function startDemoEscalationTimer(approvalId) {
+            notificationApprovalId = approvalId;
+            clearInterval(escalationInterval);
+            escalationSeconds = 30;
+
+            const timer = document.getElementById("escalation-timer");
+            const countdown = document.getElementById("escalation-countdown");
+            timer.classList.remove("hidden");
+            countdown.textContent = `${escalationSeconds}s`;
+
+            escalationInterval = setInterval(async () => {
+                escalationSeconds -= 1;
+                countdown.textContent = `${Math.max(escalationSeconds, 0)}s`;
+
+                if (escalationSeconds <= 0) {
+                    clearInterval(escalationInterval);
+                    await triggerDemoEscalation();
+                }
+            }, 1000);
+        }
+
+        async function triggerDemoEscalation() {
+            if (!notificationApprovalId) return;
+
+            clearInterval(escalationInterval);
+
+            try {
+                const response = await fetch(`/api/notifications/${encodeURIComponent(notificationApprovalId)}/escalate`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
+
+                await refreshNotificationLog(notificationApprovalId);
+                document.getElementById("escalation-timer").classList.add("hidden");
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
         async function refreshHumanAttention() {
             const id = contractorId();
             const url = id
@@ -135,10 +260,7 @@
             try {
                 const response = await fetch(url);
                 const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.detail || `Request failed: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
 
                 const items = data.items || [];
                 const card = document.getElementById("human-attention-card");
@@ -153,24 +275,12 @@
                 card.classList.remove("hidden");
                 list.innerHTML = items.map(item => `
                     <div class="issue">
-                        <strong>${item.title || "Human attention required"}</strong>
-                        <div>
-                            <strong>${item.contractor_id}</strong>
-                            ${item.contractor_name ? ` — ${item.contractor_name}` : ""}
-                        </div>
-                        <div>
-                            Risk: <strong>${item.risk_level || "UNKNOWN"}</strong>
-                            &nbsp;|&nbsp;
-                            ${item.action_count || 0} action(s) awaiting approval
-                        </div>
-                        <small>
-                            Owner: ${(item.recipient_roles || []).join(", ")}
-                            &nbsp;|&nbsp; Approval: ${item.approval_id}
-                        </small>
-                        <p>${item.message || "Consequential work requires practitioner attention."}</p>
-                        <button type="button" onclick="openHumanAttention('${item.approval_id}')">
-                            Review &amp; Approve
-                        </button>
+                        <strong>${escapeHtml(item.title || "Human attention required")}</strong>
+                        <div><strong>${escapeHtml(item.contractor_id)}</strong>${item.contractor_name ? ` — ${escapeHtml(item.contractor_name)}` : ""}</div>
+                        <div>Risk: <strong>${escapeHtml(item.risk_level || "UNKNOWN")}</strong> &nbsp;|&nbsp; ${item.action_count || 0} action(s) awaiting approval</div>
+                        <small>Owner: ${escapeHtml((item.recipient_roles || []).join(", "))} &nbsp;|&nbsp; Approval: ${escapeHtml(item.approval_id)}</small>
+                        <p>${escapeHtml(item.message || "Consequential work requires practitioner attention.")}</p>
+                        <button type="button" onclick="openHumanAttention('${escapeHtml(item.approval_id)}')">Review &amp; Approve</button>
                     </div>
                 `).join("");
             } catch (error) {
@@ -180,17 +290,17 @@
 
         async function openHumanAttention(approvalId) {
             try {
-                const response = await fetch(`/api/propose/${encodeURIComponent(document.getElementById("contractor-id").value.trim().toUpperCase())}`, {
+                const id = contractorId();
+                const response = await fetch(`/api/propose/${encodeURIComponent(id)}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" }
                 });
-
                 const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.detail || `Request failed: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
 
+                notificationApprovalId = approvalId;
                 showApproval(data);
+                await refreshNotificationLog(approvalId);
                 document.getElementById("approval-card").scrollIntoView({ behavior: "smooth", block: "start" });
             } catch (error) {
                 alert(error.message);
@@ -201,13 +311,24 @@
         window.runTaskmaster = async function () {
             await originalRunTaskmaster();
             await refreshHumanAttention();
+
+            const attention = await fetch(`/api/attention?contractor_id=${encodeURIComponent(contractorId())}`).then(r => r.json());
+            const item = (attention.items || [])[0];
+            if (item) {
+                notificationApprovalId = item.approval_id;
+                await refreshNotificationLog(notificationApprovalId);
+                startDemoEscalationTimer(notificationApprovalId);
+            }
         };
 
         const originalApproveActions = window.approveActions;
         if (originalApproveActions) {
             window.approveActions = async function () {
                 await originalApproveActions();
+                clearInterval(escalationInterval);
+                document.getElementById("escalation-timer").classList.add("hidden");
                 await refreshHumanAttention();
+                if (notificationApprovalId) await refreshNotificationLog(notificationApprovalId);
             };
         }
 
