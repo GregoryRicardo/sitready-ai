@@ -67,6 +67,7 @@ def _clear_taskmaster_state(db, contractor_ids: set[str]) -> None:
                 document.reference.delete()
 
 
+@pytest.fixture
 def db():
     """Provide a Firestore client connected to the local emulator."""
     return get_firestore_client()
