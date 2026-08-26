@@ -128,9 +128,8 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .section-subtitle { margin: 4px 0 0; color: #6b7280; font-size: 13px; }
 
-#taskmaster-card { padding: 12px 16px; }
-#taskmaster-card .taskmaster-description { font-size: 13px; line-height: 1.4; }
-#taskmaster-card .taskmaster-flow { margin-top: 9px; }
+/* The explanatory card is redundant in the judge flow; the i-button and Agent Activity carry the explanation. */
+#taskmaster-card { display: none !important; }
 
 .taskmaster-flow {
     display: flex;
