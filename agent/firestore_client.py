@@ -3,7 +3,7 @@ import os
 from google.cloud import firestore
 
 
-DEFAULT_PROJECT_ID = "sitready-ai-506306"
+DEFAULT_PROJECT_ID = "siteready-ai-506306"
 
 
 def get_firestore_client() -> firestore.Client:
