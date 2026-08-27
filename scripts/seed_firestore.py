@@ -1,11 +1,12 @@
 import json
+import os
 from pathlib import Path
 
 from google.cloud import firestore
 
 
 # Project and folder locations
-PROJECT_ID = "sitready-ai-506306"
+DEFAULT_PROJECT_ID = "siteready-ai-506306"
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 
@@ -63,11 +64,17 @@ def seed_collection(
 
 def main() -> None:
     """Seed all synthetic datasets into Firestore."""
+    project_id = (
+        os.getenv("GOOGLE_CLOUD_PROJECT")
+        or os.getenv("GCLOUD_PROJECT")
+        or DEFAULT_PROJECT_ID
+    )
+
     print("Starting SiteReady AI Firestore seed...")
-    print(f"Project: {PROJECT_ID}")
+    print(f"Project: {project_id}")
     print()
 
-    db = firestore.Client(project=PROJECT_ID)
+    db = firestore.Client(project=project_id)
 
     seed_collection(
         db,
