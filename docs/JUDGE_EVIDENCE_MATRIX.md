@@ -190,7 +190,7 @@ Escalation in 60s
 The UI also identifies the technology stack:
 
 ```text
-Powered by Google ADK · Gemini 3.6 Flash · Google Cloud
+Powered by Google ADK · Gemini 3.5 Flash · Google Cloud
 ```
 
 Implementation locations:
