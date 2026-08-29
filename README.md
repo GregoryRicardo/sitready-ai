@@ -88,7 +88,7 @@ The live Taskmaster endpoint was validated with contractor `C003` and returned:
 - `risk_level`: `HIGH`
 - `approval_required`: `True`
 
-Five critical issues were identified. The workflow created a pending approval and did not create C003 follow-up actions before approval.
+Five high-priority issues were identified. The workflow created a pending approval and did not create C003 follow-up actions before approval.
 
 An identical repeat request returned the existing pending approval instead of creating a duplicate approval.
 
@@ -105,7 +105,7 @@ Cloud Run / FastAPI
     ↓
 ADK Agent
     ↓
-Gemini 3.6 Flash
+Gemini 3.5 Flash
     ↓
 run_taskmaster_workflow tool
     ↓
@@ -125,7 +125,7 @@ User prompt
     ↓
 Google ADK Agent
     ↓
-Gemini 3.6 Flash
+Gemini 3.5 Flash
     ↓
 SiteReady tools
     ↓
