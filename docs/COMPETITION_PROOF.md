@@ -62,7 +62,7 @@ The design principle is **controlled autonomy**: the agent can execute permitted
 
 ## 3. Technology Responsibilities
 
-### Gemini 3.6 Flash
+### Gemini 3.5 Flash
 
 Provides the model reasoning capability for the Google ADK SiteReady agent.
 
@@ -102,7 +102,7 @@ Cloud Run / FastAPI
       ↓
 Google ADK Agent
       ↓
-Gemini 3.6 Flash
+Gemini 3.5 Flash
       ↓
 run_taskmaster_workflow
       ↓
@@ -119,7 +119,7 @@ User prompt
       ↓
 Google ADK Agent
       ↓
-Gemini 3.6 Flash
+Gemini 3.5 Flash
       ↓
 SiteReady tools
       ↓
@@ -264,7 +264,7 @@ The interface also exposes:
 - live demo escalation countdown;
 - escalation trigger state;
 - verification results;
-- technology visibility through `Powered by Google ADK · Gemini 3.6 Flash · Google Cloud`.
+- technology visibility through `Powered by Google ADK · Gemini 3.5 Flash · Google Cloud`.
 
 ## 11. Production API Entry Points
 
@@ -288,7 +288,7 @@ POST /api/approve/{approval_id}
 
 | Evidence | Result |
 |---|---|
-| Gemini 3.6 Flash configured | ✅ |
+| Gemini 3.5 Flash configured | ✅ |
 | Google ADK Agent configured | ✅ |
 | Direct ADK runner available | ✅ |
 | ADK + Gemini web bridge implemented | ✅ |
