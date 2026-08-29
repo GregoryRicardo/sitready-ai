@@ -6,7 +6,7 @@ This document is a fast navigation map for judges and reviewers. Each major comp
 
 | Claim | Evidence | Where to inspect |
 |---|---|---|
-| Gemini 3.6 Flash is the configured model | `MODEL = "gemini-3.6-flash"` and `Gemini(model=MODEL)` | `app/agent.py` |
+| Gemini 3.5 Flash is the configured model | `MODEL = "gemini-3.5-flash"` and `Gemini(model=MODEL)` | `app/agent.py` |
 | Google ADK is the agent framework | `Agent` + `Gemini` imports and `root_agent = Agent(...)` | `app/agent.py` |
 | ADK/Gemini dependencies are declared | `google-adk[gcp]` dependency | `pyproject.toml` |
 | Direct ADK/Gemini execution path exists | `Runner` executes `root_agent` | `run_agent.py` |

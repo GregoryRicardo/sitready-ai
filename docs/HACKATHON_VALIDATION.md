@@ -7,13 +7,13 @@ This document records the end-to-end validation completed for the All Things Age
 ## Competition alignment
 
 - **Track:** Taskmaster
-- **Gemini model:** `gemini-3.6-flash`
+- **Gemini model:** `gemini-3.5-flash`
 - **Google agent framework:** Google ADK
 - **Google Cloud services:** Cloud Run and Cloud Firestore
 - **Live Cloud Run service:** `sitready-ai`
 - **Region:** `africa-south1`
 
-The repository contains a Google ADK `Agent` with `Gemini(model="gemini-3.6-flash")`. The direct ADK/Gemini execution path is provided by `run_agent.py`.
+The repository contains a Google ADK `Agent` with `Gemini(model="gemini-3.5-flash")`. The direct ADK/Gemini execution path is provided by `run_agent.py`.
 
 The production web console invokes the Taskmaster workflow through an ADK/Gemini bridge. Gemini selects the authoritative `run_taskmaster_workflow` tool, while SiteReady tools and Taskmaster policy control deterministic evidence access, execution, persistence, approval, escalation and verification.
 

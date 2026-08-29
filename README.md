@@ -8,10 +8,10 @@ SiteReady AI turns contractor-readiness evidence into a controlled, action-orien
 
 **Track:** Taskmaster  
 **Google Agent Framework:** Google ADK  
-**Gemini model:** `gemini-3.6-flash`  
+**Gemini model:** `gemini-3.5-flash`  
 **Google Cloud:** Cloud Run + Cloud Firestore
 
-The repository contains a Google ADK `Agent` configured with `Gemini(model="gemini-3.6-flash")`. The direct ADK/Gemini runner is `run_agent.py`.
+The repository contains a Google ADK `Agent` configured with `Gemini(model="gemini-3.5-flash")`. The direct ADK/Gemini runner is `run_agent.py`.
 
 The production web console now invokes the Taskmaster workflow through an ADK/Gemini bridge. Gemini selects the authoritative `run_taskmaster_workflow` tool, while SiteReady tools and Taskmaster policy control evidence, execution boundaries, persistence, approval, escalation and verification.
 
