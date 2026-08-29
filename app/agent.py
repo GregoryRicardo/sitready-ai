@@ -21,7 +21,7 @@ from agent.tools.taskmaster_tools import (
 )
 
 
-MODEL = "gemini-3.6-flash"
+MODEL = "gemini-3.5-flash"
 
 
 def lookup_contractor(contractor_id: str) -> dict:
