@@ -354,16 +354,6 @@
             }
         }
 
-        const originalRunTaskmaster = window.runTaskmaster;
-        window.runTaskmaster = async function () {
-            await originalRunTaskmaster();
-            const items = await refreshHumanAttention();
-            const item = items[0];
-            if (item) {
-                await startNotificationMonitor(item.approval_id);
-            }
-        };
-
         const originalApproveActions = window.approveActions;
         if (originalApproveActions) {
             window.approveActions = async function () {
